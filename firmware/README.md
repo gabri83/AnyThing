@@ -67,7 +67,97 @@ firmware/
    nrfjprog --verify firmware.hex
    ```
 
-## Input System
+### Input System
+
+#### Hardware Interfaces
+
+1. **Buttons**
+   - GPIO pins with pull-up resistors
+   - Hardware debouncing
+   - 5ms debounce time
+   - Long press detection (500ms)
+   - Auto-repeat support
+
+2. **Rotary Encoder**
+   - Gray code decoding
+   - 4-state state machine
+   - Variable acceleration
+   - 4 pulses per detent
+
+3. **Touch Panel (FT6336U)**
+   - I2C interface at 400kHz
+   - 10-bit resolution
+   - Multi-touch support (2 points)
+   - Gesture recognition
+   - Power management
+
+#### Software Architecture
+
+```c
+// Button states
+typedef enum {
+    BUTTON_STATE_RELEASED = 0,
+    BUTTON_STATE_PRESSED,
+    BUTTON_STATE_HELD,      // Long press
+    BUTTON_STATE_REPEAT     // Auto-repeat
+} button_state_t;
+
+// Touch gesture types
+typedef enum {
+    GESTURE_NONE,
+    GESTURE_TAP,
+    GESTURE_DOUBLE_TAP,
+    GESTURE_SWIPE_LEFT,
+    GESTURE_SWIPE_RIGHT,
+    GESTURE_SWIPE_UP,
+    GESTURE_SWIPE_DOWN
+} gesture_type_t;
+```
+
+#### Event Flow
+```
+[Hardware Interrupt] → [Debounce/Process] → [Event Generation] → [Callback]
+      ↑                                                              |
+      +──────────────────────[State Update]──────────────────────────+
+```
+
+#### Power Management
+
+1. **Active Mode**
+   - Full polling rate
+   - All interrupts enabled
+   - Touch panel active
+
+2. **Sleep Mode**
+   - Reduced polling
+   - Wake on touch/button
+   - Touch panel in monitor mode
+
+#### Configuration
+```c
+typedef struct {
+    struct {
+        uint16_t debounce_ms;
+        uint16_t long_press_ms;
+        uint16_t repeat_start_ms;
+        uint16_t repeat_interval_ms;
+    } button;
+
+    struct {
+        uint8_t steps_per_detent;
+        uint8_t acceleration;
+    } dial;
+
+    struct {
+        uint16_t sample_rate_hz;
+        uint16_t pressure_threshold;
+        uint16_t long_press_ms;
+        uint16_t swipe_threshold;
+    } touch;
+} input_config_t;
+```
+
+### Input System
 
 ### Hardware Mapping
 ```
