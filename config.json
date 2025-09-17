@@ -1,0 +1,6 @@
+{
+  "serverPort": 3000,
+  "serverHost": "localhost",
+  "pluginDir": "plugins/registry",
+  "autoStart": false
+}
