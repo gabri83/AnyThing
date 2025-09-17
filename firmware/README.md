@@ -67,6 +67,64 @@ firmware/
    nrfjprog --verify firmware.hex
    ```
 
+## Input System
+
+### Hardware Mapping
+```
++----------------+
+|    Display     |
+|                |
+| [P1]      [P2] | <- Preset buttons
+| [P3]      [P4] |
+|                |
+|    [DIAL]      | <- Rotary encoder with push button
+|    [BACK]      | <- Back button
++----------------+
+```
+
+### Button System
+```c
+typedef enum {
+    BUTTON_BACK = 0,    // Back button
+    BUTTON_PRESET_1,    // Preset button 1
+    BUTTON_PRESET_2,    // Preset button 2
+    BUTTON_PRESET_3,    // Preset button 3
+    BUTTON_PRESET_4,    // Preset button 4
+    BUTTON_DIAL,        // Dial press
+} button_id_t;
+```
+
+### Rotary Encoder
+- 4-state Gray code decoding
+- Acceleration support
+- Debouncing
+- Direction detection
+
+### Touch Panel
+- Capacitive touch
+- Multi-touch support
+- Gesture recognition
+- Palm rejection
+
+### Event System
+```c
+typedef struct {
+    input_event_type_t type;
+    union {
+        button_event_t button;
+        dial_event_t dial;
+        touch_event_t touch;
+        gesture_event_t gesture;
+    };
+    uint32_t timestamp;
+} input_event_t;
+```
+
+### Power Management
+- Auto-sleep on inactivity
+- Wake on touch/button
+- Configurable timeouts
+
 ## Protocol Implementation
 
 ### USB Protocol
