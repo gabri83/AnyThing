@@ -1,5 +1,11 @@
 {
   "name": "anything",
+  "private": true,
+  "workspaces": [
+    "host",
+    "ui",
+    "shared"
+  ],
   "version": "0.1.0",
   "description": "Open platform to repurpose Spotify CarThing into a versatile controller",
   "main": "dist/index.js",
