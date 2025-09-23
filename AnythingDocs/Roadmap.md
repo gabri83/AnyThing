@@ -21,6 +21,12 @@
 - Provide Server App, Device Runtime, CLI, Apple Music plugin, Macro plugin.  
 - Provide documentation and Hello World plugin.  
 
+Notes:
+- Completed repo structure fix and working server with WS+HTTP status.
+- Input→plugin routing and display updates operational.
+- CLI discoverability improved; default configs provided for core plugins.
+- Began protocol unification by emitting shared typed PlayerState.
+
 ---
 
 ## Phase 2 — Beta (Weeks 13-22)
@@ -29,6 +35,11 @@
 - New plugins (Spotify, OBS, Home Assistant).  
 - UI improvements (widgets, theming).  
 - Simulator for non-CarThing devs.  
+
+Additional next steps proposed:
+- Finish adopting shared protocol for all WS messages.
+- Wire UI simulator to consume typed messages and render now playing.
+- Add RPC for CLI↔server for live status and mapping updates.
 
 ---
 

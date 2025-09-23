@@ -35,23 +35,22 @@ const Button = styled.button`
 `;
 
 export function Controls() {
-  const { send } = useWebSocket();
+  const { send, socket } = useWebSocket();
   const [playerState, setPlayerState] = useState<'playing' | 'paused' | 'stopped'>('stopped');
 
   useEffect(() => {
-    const { socket } = useWebSocket();
     if (!socket) return;
 
     const handleMessage = (event: MessageEvent) => {
       const message = JSON.parse(event.data);
-      if (message.kind === 'event' && message.domain === 'music' && message.name === 'trackUpdate') {
-        setPlayerState(message.payload.state);
+      if (message.type === 'state' && message.target === 'music') {
+        setPlayerState(message.data.status);
       }
     };
 
     socket.addEventListener('message', handleMessage);
     return () => socket.removeEventListener('message', handleMessage);
-  }, []);
+  }, [socket]);
 
   const sendControl = (action: 'previous' | 'play' | 'pause' | 'next') => {
     const command: MusicCommandMessage = {
@@ -64,11 +63,11 @@ export function Controls() {
 
   return (
     <Container>
-      <Button onClick={() => sendControl('previous')}>⏮</Button>
-      <Button onClick={() => sendControl(playerState === 'playing' ? 'pause' : 'play')}>
+      <Button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); sendControl('previous'); }}>⏮</Button>
+      <Button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); sendControl(playerState === 'playing' ? 'pause' : 'play'); }}>
         {playerState === 'playing' ? '⏸' : '▶'}
       </Button>
-      <Button onClick={() => sendControl('next')}>⏭</Button>
+      <Button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); sendControl('next'); }}>⏭</Button>
     </Container>
   );
 }

@@ -136,6 +136,28 @@ npm run test:client
 npm run cli:dev
 ```
 
+### Recent Changes (Approach & Edits)
+
+- Build/run fixed by promoting working sources into `src/` and compiling to `dist/`.
+- WebSocket server now attaches to an HTTP server; visiting `http://localhost:3000` shows a status page.
+- Introduced active plugin handling and input→plugin action routing; server broadcasts plugin display updates.
+- CLI linked to `dist` and enhanced to discover plugin configs in `plugins/registry`, `src/plugins/registry`, or `dist/plugins/registry`.
+- Added default plugin config files for `apple-music` and `system-media` to make CLI listings visible.
+- Began protocol unification: server emits typed music PlayerState messages using `shared` protocol types.
+- macOS scope documented: Apple Music and System Media services use AppleScript and require permissions.
+
+Quickstart (updated):
+
+```bash
+npm install
+npm run build
+npm start &   # visit http://localhost:3000
+
+# In another terminal
+npm run cli:link
+anything plugins
+```
+
 ## Contributing
 
 1. Fork the repository

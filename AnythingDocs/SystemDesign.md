@@ -100,3 +100,13 @@ Rationale: intentionally simple to avoid any inherited design/licensing concerns
   - Dry-run flashing in QEMU/emulator if possible
   - CRC/signature validation before write
   - Keep stock recovery intact; never overwrite bootloader without JTAG plan
+
+---
+
+## Implementation Notes (Approach & Current State)
+
+- Server exposes HTTP status and WebSocket on the same port, simplifying connection and diagnostics.
+- Active plugin model added; input events are routed to plugin actions (press/rotate/touch).
+- Display updates emitted via WS; additionally, typed `music` PlayerState messages are broadcast using `shared` protocol types to align components.
+- CLI enhanced to manage plugin configs found in either `src/` or built `dist/`, supporting both dev and production layouts.
+- Platform scope for MVP: macOS with AppleScript-based Apple Music/System Media control; permissions required.

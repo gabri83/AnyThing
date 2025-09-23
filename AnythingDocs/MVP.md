@@ -36,6 +36,16 @@
 
 ---
 
+## Delivery Notes (Approach)
+
+- Enabled a working dev loop by moving code to `src/` and compiling to `dist/`.
+- WebSocket + HTTP combined on one port for easy access and health checks.
+- Input events now trigger active plugin actions; display updates broadcast to clients.
+- CLI lists plugins from config files; default configs added for core plugins.
+- Initial protocol alignment: server emits `music` PlayerState using shared types for future UI/firmware.
+
+---
+
 👉 Example “Hello World” plugin (MVP-level):
 
 ```js

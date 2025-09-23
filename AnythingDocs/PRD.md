@@ -95,3 +95,14 @@ Example UI flows:
 - **Reverse Engineering Stability:** Relying on unofficial CarThing OS. → Use Nocturne approach, stable abstractions.  
 - **Apple Music API Restrictions:** Requires OAuth, limited metadata. → Mitigation: start with basic playback.  
 - **Adoption:** Small hardware base. → Broaden scope: allow AnyThing Server + plugin system to run on other displays (e.g., Pi with touch).  
+
+---
+
+## Implementation Notes (What changed & why)
+
+- Consolidated the server/CLI code into `src/` for a reliable build to `dist/`.
+- Added an HTTP status page on the same port as WebSocket to improve UX.
+- Implemented an active-plugin model and routed inputs (press/rotate/touch) to plugin actions.
+- Server now broadcasts display updates and typed PlayerState messages (using `shared` protocol) to align device/UI with PRD.
+- CLI improved to manage and discover plugin configs from multiple locations, supporting dev and built outputs.
+- Scoped MVP to macOS for Apple Music and System Media via AppleScript; docs updated to reflect permissions and platform targeting.
