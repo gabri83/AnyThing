@@ -99,6 +99,24 @@ module.exports = {
       render();
     });
 
+    // The dial. `delta` is a signed step count, and is more than 1 when the
+    // dial is spun quickly — scale by it rather than treating each call as one
+    // click, or fast turns will feel like the dial is ignoring you.
+    api.onAction('spin', (payload) => {
+      count = Math.max(0, count + payload.delta * step);
+      render();
+    });
+
+    // These apply only while this plugin's page is on screen, so the dial is
+    // free to mean something else on another page. What the device physically
+    // sends is a separate concern: see docs/CONTROLS.md.
+    api.setControls({
+      rotate: 'spin',
+      press: 'bump',
+      back: 'reset',
+      presets: ['bump', 'toggle-loud', undefined, 'reset']
+    });
+
     // Repaint once a second so the clock tile stays current. Use api.every
     // rather than setInterval: the host stops it for you at shutdown.
     api.every(1000, render);

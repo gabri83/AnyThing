@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PROTOCOL_VERSION,
   parseServerMessage,
+  type InputConfig,
   type Page,
   type Tile
 } from '@anything/shared';
@@ -21,6 +22,8 @@ export interface Connection {
   deniedReason: string | null;
   pages: Page[];
   notice: Notice | null;
+  /** How to read the device's physical controls. Null until the host says. */
+  input: InputConfig | null;
   invoke: (plugin: string, action: string, payload?: unknown) => void;
 }
 
@@ -76,6 +79,7 @@ export function useConnection(): Connection {
   const [deniedReason, setDeniedReason] = useState<string | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [input, setInput] = useState<InputConfig | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const attemptRef = useRef(0);
@@ -110,6 +114,7 @@ export function useConnection(): Connection {
           attemptRef.current = 0;
           setStatus('open');
           setDeniedReason(null);
+          setInput(message.input);
           break;
 
         case 'denied':
@@ -128,6 +133,16 @@ export function useConnection(): Connection {
             current.map((page) =>
               page.plugin === message.plugin
                 ? { ...page, tiles: message.tiles as Tile[] }
+                : page
+            )
+          );
+          break;
+
+        case 'controls':
+          setPages((current) =>
+            current.map((page) =>
+              page.plugin === message.plugin
+                ? { ...page, controls: message.controls }
                 : page
             )
           );
@@ -174,5 +189,5 @@ export function useConnection(): Connection {
     socket.send(JSON.stringify({ t: 'invoke', plugin, action, payload }));
   }, []);
 
-  return { status, deniedReason, pages, notice, invoke };
+  return { status, deniedReason, pages, notice, input, invoke };
 }

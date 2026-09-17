@@ -31,7 +31,13 @@ describe('PluginHost.register', () => {
 
     expect(host.ids()).toEqual(['alpha']);
     expect(host.pages()).toEqual([
-      { plugin: 'alpha', title: 'alpha', icon: undefined, tiles: [textTile('one')] }
+      {
+        plugin: 'alpha',
+        title: 'alpha',
+        icon: undefined,
+        tiles: [textTile('one')],
+        controls: {}
+      }
     ]);
   });
 

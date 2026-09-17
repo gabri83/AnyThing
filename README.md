@@ -8,12 +8,13 @@ them in a grid and sends presses back. Three plugins ship with it:
 
 | Plugin | What it does |
 | --- | --- |
-| `apple-music` | Play/pause, skip, seek, album art, volume, shuffle |
+| `apple-music` | Play/pause, skip, seek, album art, volume, shuffle. The dial is volume |
 | `macros` | A Stream Deck: shell commands, AppleScript, Shortcuts, keystrokes |
 | `sysmon` | CPU and memory always; temperature and fans where the Mac allows |
 
 Everything the bundled plugins do goes through the same public plugin API, so a
-plugin you write has exactly the capabilities they have.
+plugin you write has exactly the capabilities they have — including the dial and
+the physical buttons.
 
 ## Quickstart
 
@@ -58,6 +59,14 @@ sort the hardware out later.
 See [docs/DEVICE.md](docs/DEVICE.md) for how to tell what is currently on your
 device and how to point it here.
 
+### The dial and buttons
+
+The dial controls whichever page is on screen — volume on the music page. What
+the dial and buttons actually emit depends on the image you flashed, so the
+mapping is configuration rather than a guess in the code. Open `/#input` on the
+device to see exactly what yours sends, then adjust `input.keymap`.
+[docs/CONTROLS.md](docs/CONTROLS.md) covers it.
+
 ## Configuration
 
 Config lives at `~/.anything/config.json`, created on first run:
@@ -66,6 +75,7 @@ Config lives at `~/.anything/config.json`, created on first run:
 {
   "server": { "host": "0.0.0.0", "port": 3000 },
   "auth": { "enabled": true, "token": "generated-on-first-run" },
+  "input": { "wheel": true, "wheelInvert": false, "rotateFlushMs": 80 },
   "plugins": {
     "apple-music": { "pollMs": 1500, "volumeStep": 5 },
     "sysmon": { "pollMs": 2000 },
@@ -84,7 +94,8 @@ Config lives at `~/.anything/config.json`, created on first run:
 ```
 
 Anything under a plugin's key is that plugin's business; `enabled: false`
-switches one off. Restart the host after editing.
+switches one off. `input` is the dial and button mapping
+([docs/CONTROLS.md](docs/CONTROLS.md)). Restart the host after editing.
 
 ### A note on the token
 
@@ -139,7 +150,8 @@ Drop it in `~/.anything/plugins/coffee/index.js` and restart. A working example
 with every tile kind is in [`examples/hello-world`](examples/hello-world).
 
 The full API — all five tile kinds, the grid, actions, polling, serving files —
-is in [docs/PLUGINS.md](docs/PLUGINS.md).
+is in [docs/PLUGINS.md](docs/PLUGINS.md), and the dial and buttons are in
+[docs/CONTROLS.md](docs/CONTROLS.md).
 
 ## Layout
 

@@ -10,6 +10,8 @@
  * the invocation back to the plugin that registered it.
  */
 
+import type { ControlBindings } from './controls';
+
 /** Grid footprint. The grid is 6 columns x 3 rows on an 800x480 screen. */
 export interface TileSpan {
   /** Columns to occupy (1-6). Default 1. */
@@ -125,4 +127,10 @@ export interface Page {
   /** Single character or emoji for the page switcher. */
   icon?: string;
   tiles: Tile[];
+  /**
+   * Physical control bindings, which apply while this page is the active one.
+   * That is what makes the dial mean volume on the music page and something
+   * else elsewhere, with no global mapping to keep in sync.
+   */
+  controls?: ControlBindings;
 }

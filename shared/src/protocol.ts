@@ -6,6 +6,7 @@
  * dumb means a plugin can change its entire layout without a UI release.
  */
 
+import type { ControlBindings, InputConfig } from './controls';
 import type { Page } from './tiles';
 
 export const PROTOCOL_VERSION = 1;
@@ -47,6 +48,8 @@ export interface WelcomeMessage {
     platform: string;
     arch: string;
   };
+  /** How the client should read the device's physical controls. */
+  input: InputConfig;
 }
 
 /** Auth failed or the protocol version is unsupported. The socket then closes. */
@@ -69,6 +72,13 @@ export interface TilesMessage {
   tiles: Page['tiles'];
 }
 
+/** One plugin's control bindings changed. */
+export interface ControlsMessage {
+  t: 'controls';
+  plugin: string;
+  controls: ControlBindings;
+}
+
 /** Transient message for the client to show, e.g. an action that failed. */
 export interface NoticeMessage {
   t: 'notice';
@@ -81,6 +91,7 @@ export type ServerMessage =
   | DeniedMessage
   | PagesMessage
   | TilesMessage
+  | ControlsMessage
   | NoticeMessage;
 
 export type AnyMessage = ClientMessage | ServerMessage;
@@ -144,6 +155,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     case 'denied':
     case 'pages':
     case 'tiles':
+    case 'controls':
     case 'notice':
       return value as unknown as ServerMessage;
     default:

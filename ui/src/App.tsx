@@ -1,10 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useConnection } from './connection';
+import { useDeviceInput, type RawInputEvent } from './input';
+import { InputInspector } from './InputInspector';
 import { TileView } from './tiles/TileView';
 
+/** Most recent events shown in the inspector. */
+const EVENT_LOG_LIMIT = 12;
+
+/** The inspector is opened by visiting /#input, so it needs no tile of its own. */
+function useHashFlag(flag: string): [boolean, () => void] {
+  const [on, setOn] = useState(() => window.location.hash === `#${flag}`);
+
+  useEffect(() => {
+    const sync = () => setOn(window.location.hash === `#${flag}`);
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, [flag]);
+
+  const clear = useCallback(() => {
+    window.history.replaceState({}, '', window.location.pathname);
+    setOn(false);
+  }, []);
+
+  return [on, clear];
+}
+
 export function App() {
-  const { status, deniedReason, pages, notice, invoke } = useConnection();
+  const { status, deniedReason, pages, notice, input, invoke } = useConnection();
   const [activePlugin, setActivePlugin] = useState<string | null>(null);
+  const [inspecting, closeInspector] = useHashFlag('input');
+  const [events, setEvents] = useState<RawInputEvent[]>([]);
 
   // Follow the host: keep the chosen page if it still exists, else fall back to
   // the first one. This survives a plugin being disabled while the device is on.
@@ -21,6 +46,37 @@ export function App() {
   }, [pages]);
 
   const active = pages.find((page) => page.plugin === activePlugin) ?? null;
+
+  const recordEvent = useCallback((event: RawInputEvent) => {
+    setEvents((current) => [event, ...current].slice(0, EVENT_LOG_LIMIT));
+  }, []);
+
+  // The dial, back button and presets belong to whichever page is showing, so
+  // the same hardware means volume here and something else elsewhere.
+  useDeviceInput({
+    input,
+    bindings: active?.controls,
+    invoke: (action, payload) => {
+      if (active) invoke(active.plugin, action, payload);
+    },
+    onRaw: inspecting ? recordEvent : undefined,
+    // While inspecting, report events without firing actions: you should be
+    // able to find out what a button does without it muting your mic.
+    inspectOnly: inspecting
+  });
+
+  if (inspecting) {
+    return (
+      <div className="app">
+        <InputInspector
+          input={input}
+          bindings={active?.controls}
+          events={events}
+          onClose={closeInspector}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -40,6 +96,11 @@ export function App() {
             </button>
           ))}
         </div>
+        {active?.controls?.rotate && (
+          <span className="dial-hint" title="The dial controls this page">
+            {'◌'}
+          </span>
+        )}
         <span
           className="status-dot"
           data-status={status}

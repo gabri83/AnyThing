@@ -9,6 +9,7 @@
  * See docs/PLUGINS.md for a walkthrough.
  */
 
+import type { ControlBindings } from './controls';
 import type { Tile } from './tiles';
 
 export interface PluginManifest {
@@ -55,6 +56,17 @@ export interface PluginApi {
    * same id twice replaces the handler.
    */
   onAction(id: string, handler: ActionHandler): void;
+
+  /**
+   * Bind the device's physical controls — dial, back button, presets — to your
+   * action ids. They apply only while your page is the active one, so each
+   * plugin can give the dial its own meaning.
+   *
+   * The `rotate` action is invoked with `{ delta }`: signed dial steps, several
+   * at a time when the dial is spun quickly. Scale by delta rather than
+   * treating each call as one click, or a fast spin will feel unresponsive.
+   */
+  setControls(bindings: ControlBindings): void;
 
   /**
    * Run `fn` every `ms` milliseconds until teardown. The first run happens

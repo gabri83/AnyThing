@@ -74,6 +74,21 @@ correct rather than broken. The same text appears when a fan is genuinely
 stopped, since the SMC reports both as zero and there is no way to tell them
 apart from outside.
 
+## Setting fan speed is a different problem
+
+Reading a fan and controlling one are not the same job. Everything above reads
+SMC keys; changing a fan's speed means *writing* them, which needs root and a
+helper such as smcFanControl or Macs Fan Control, and on Apple Silicon is
+largely not available at all. Override the firmware's thermal management badly
+and you get a hot laptop, not just a wrong number on a screen.
+
+So `sysmon` reads only, and this repo makes no attempt to set fan speed.
+
+The control layer is ready for it if that changes: a plugin binds the dial with
+`api.setControls({ rotate: 'fan-speed' })` and receives a signed step count, so
+the plumbing from dial to plugin already exists and is tested. What is missing
+is a safe, supported way to write the value — not the wiring.
+
 ## Turning it off
 
 ```json

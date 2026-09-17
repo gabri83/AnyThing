@@ -1,4 +1,9 @@
-import { definePlugin, type PluginApi, type Tile } from '@anything/shared';
+import {
+  definePlugin,
+  rotateDelta,
+  type PluginApi,
+  type Tile
+} from '@anything/shared';
 import { AppleMusicService, EMPTY_SNAPSHOT, type MusicSnapshot } from './service';
 
 const ACTIONS = {
@@ -9,7 +14,8 @@ const ACTIONS = {
   volumeUp: 'volume-up',
   volumeDown: 'volume-down',
   shuffle: 'shuffle',
-  open: 'open'
+  open: 'open',
+  dialVolume: 'dial-volume'
 } as const;
 
 interface Settings {
@@ -158,6 +164,26 @@ export default definePlugin({
     );
     api.onAction(ACTIONS.shuffle, act(() => service.setShuffle(!snapshot.shuffle)));
     api.onAction(ACTIONS.open, act(() => service.activate()));
+
+    /**
+     * The dial. One AppleScript call for the whole gesture, scaled by the step
+     * count the UI accumulated: spinning the dial ten clicks must not mean ten
+     * round trips to Music, or the volume lags behind your hand.
+     */
+    api.onAction(ACTIONS.dialVolume, async (payload) => {
+      const delta = rotateDelta(payload);
+      if (delta === null) return;
+      await service.nudgeVolume(delta * settings.volumeStep);
+      await refresh();
+    });
+
+    // Bindings apply only while this page is showing, so the dial means volume
+    // here and is free to mean something else on another plugin's page.
+    api.setControls({
+      rotate: ACTIONS.dialVolume,
+      press: ACTIONS.playPause,
+      presets: [ACTIONS.previous, ACTIONS.playPause, ACTIONS.next, ACTIONS.shuffle]
+    });
 
     api.onAction(ACTIONS.seek, async (payload) => {
       const position = seekPosition(payload);

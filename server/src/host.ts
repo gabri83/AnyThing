@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { isAbsolute } from 'path';
 import type {
   ActionHandler,
+  ControlBindings,
   Page,
   Plugin,
   PluginApi,
@@ -17,6 +18,8 @@ interface LoadedPlugin {
   /** Serialized tiles, kept to suppress no-op broadcasts. */
   tilesFingerprint: string;
   actions: Map<string, ActionHandler>;
+  /** Physical control bindings, active while this plugin's page is showing. */
+  controls: ControlBindings;
   timers: NodeJS.Timeout[];
   /** Served file name -> absolute path on disk. */
   files: Map<string, string>;
@@ -28,9 +31,10 @@ interface LoadedPlugin {
  * only moves tiles outward and invocations inward.
  *
  * Emits:
- *   'pages'  (pages: Page[])                  plugin set changed
- *   'tiles'  (pluginId: string, tiles: Tile[]) one plugin's tiles changed
- *   'notice' (level, message)                  transient message for devices
+ *   'pages'    (pages: Page[])                    plugin set changed
+ *   'tiles'    (pluginId: string, tiles: Tile[])   one plugin's tiles changed
+ *   'controls' (pluginId: string, ControlBindings) one plugin's bindings changed
+ *   'notice'   (level, message)                    transient message for devices
  */
 export class PluginHost extends EventEmitter {
   private readonly plugins = new Map<string, LoadedPlugin>();
@@ -75,6 +79,7 @@ export class PluginHost extends EventEmitter {
       tiles: [],
       tilesFingerprint: '[]',
       actions: new Map(),
+      controls: {},
       timers: [],
       files: new Map()
     };
@@ -118,6 +123,11 @@ export class PluginHost extends EventEmitter {
 
       onAction: (actionId: string, handler: ActionHandler) => {
         entry.actions.set(actionId, handler);
+      },
+
+      setControls: (bindings: ControlBindings) => {
+        entry.controls = bindings;
+        this.emit('controls', id, bindings);
       },
 
       every: (ms: number, fn: () => void | Promise<void>) => {
@@ -169,12 +179,17 @@ export class PluginHost extends EventEmitter {
       plugin: id,
       title: entry.plugin.manifest.name,
       icon: entry.plugin.manifest.icon,
-      tiles: entry.tiles
+      tiles: entry.tiles,
+      controls: entry.controls
     }));
   }
 
   public tilesFor(pluginId: string): Tile[] | undefined {
     return this.plugins.get(pluginId)?.tiles;
+  }
+
+  public controlsFor(pluginId: string): ControlBindings | undefined {
+    return this.plugins.get(pluginId)?.controls;
   }
 
   public has(pluginId: string): boolean {

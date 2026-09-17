@@ -231,6 +231,33 @@ describe('Transport serving a built UI', () => {
   });
 });
 
+describe('Transport failing to bind', () => {
+  // Regression: the WebSocket server re-emits the HTTP server's errors, so a
+  // busy port used to surface as an unhandled 'error' event and a stack trace.
+  it('rejects with an actionable message when the port is taken', async () => {
+    const first = new PluginHost(config());
+    const holding = new Transport({ config: config(), host: first, version: 'test' });
+    await holding.start();
+
+    const taken: AnythingConfig = {
+      ...config(),
+      server: { host: '127.0.0.1', port: holding.port() }
+    };
+    const second = new PluginHost(taken);
+    const blocked = new Transport({ config: taken, host: second, version: 'test' });
+
+    try {
+      await expect(blocked.start()).rejects.toThrow(
+        new RegExp(`Port ${holding.port()} is already in use`)
+      );
+    } finally {
+      await holding.stop();
+      await first.teardown();
+      await second.teardown();
+    }
+  });
+});
+
 describe('Transport with auth disabled', () => {
   it('accepts a client that sends no token', async () => {
     const open = config({ enabled: false, token: '' });

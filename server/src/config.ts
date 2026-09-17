@@ -1,4 +1,10 @@
 import { randomBytes } from 'crypto';
+import {
+  DEFAULT_INPUT_CONFIG,
+  INPUT_GESTURES,
+  type InputConfig,
+  type InputGesture
+} from '@anything/shared';
 import { existsSync } from 'fs';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { homedir } from 'os';
@@ -19,6 +25,11 @@ export interface AnythingConfig {
     enabled: boolean;
     token: string;
   };
+  /**
+   * How the device's physical controls are read. Sent to every client, so the
+   * mapping lives in one place rather than being baked into the UI.
+   */
+  input: InputConfig;
   /** Per-plugin config. `enabled: false` skips the plugin at load time. */
   plugins: Record<string, Record<string, unknown> & { enabled?: boolean }>;
 }
@@ -26,6 +37,7 @@ export interface AnythingConfig {
 export const DEFAULT_CONFIG: AnythingConfig = {
   server: { host: '0.0.0.0', port: 3000 },
   auth: { enabled: true, token: '' },
+  input: DEFAULT_INPUT_CONFIG,
   plugins: {}
 };
 
@@ -42,6 +54,41 @@ export function userPluginDir(): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Validate an input config, keeping only bindings that name a real gesture.
+ *
+ * A keymap is the thing a user hand-edits after watching the input inspector,
+ * so a typo is likely. One bad entry drops that key rather than the whole
+ * mapping, and a keymap that ends up empty falls back to the defaults so the
+ * device is never left with no controls at all.
+ */
+export function normalizeInput(raw: unknown): InputConfig {
+  if (!isRecord(raw)) return DEFAULT_INPUT_CONFIG;
+
+  const keymap: Record<string, InputGesture> = {};
+  if (isRecord(raw.keymap)) {
+    for (const [key, gesture] of Object.entries(raw.keymap)) {
+      if (typeof gesture === 'string' && INPUT_GESTURES.includes(gesture as InputGesture)) {
+        keymap[key] = gesture as InputGesture;
+      }
+    }
+  }
+
+  const flush = Number(raw.rotateFlushMs);
+  return {
+    keymap: Object.keys(keymap).length > 0 ? keymap : DEFAULT_INPUT_CONFIG.keymap,
+    wheel: typeof raw.wheel === 'boolean' ? raw.wheel : DEFAULT_INPUT_CONFIG.wheel,
+    wheelInvert:
+      typeof raw.wheelInvert === 'boolean'
+        ? raw.wheelInvert
+        : DEFAULT_INPUT_CONFIG.wheelInvert,
+    rotateFlushMs:
+      Number.isFinite(flush) && flush >= 0 && flush <= 1000
+        ? flush
+        : DEFAULT_INPUT_CONFIG.rotateFlushMs
+  };
 }
 
 /**
@@ -64,6 +111,7 @@ export function normalizeConfig(raw: unknown): AnythingConfig {
       enabled: typeof auth.enabled === 'boolean' ? auth.enabled : true,
       token: typeof auth.token === 'string' ? auth.token : ''
     },
+    input: normalizeInput(source.input),
     plugins: isRecord(source.plugins) ? (source.plugins as AnythingConfig['plugins']) : {}
   };
 }

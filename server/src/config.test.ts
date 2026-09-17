@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { DEFAULT_INPUT_CONFIG } from '@anything/shared';
 import { loadConfig, normalizeConfig, pluginConfig, saveConfig } from './config';
 
 async function scratchFile(name = 'config.json'): Promise<string> {
@@ -13,6 +14,7 @@ describe('normalizeConfig', () => {
     expect(normalizeConfig({})).toEqual({
       server: { host: '0.0.0.0', port: 3000 },
       auth: { enabled: true, token: '' },
+      input: DEFAULT_INPUT_CONFIG,
       plugins: {}
     });
   });

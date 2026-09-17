@@ -8,6 +8,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import {
   PROTOCOL_VERSION,
   parseClientMessage,
+  type ControlBindings,
   type Page,
   type ServerMessage,
   type Tile
@@ -109,10 +110,26 @@ export class Transport {
     this.wss = new WebSocketServer({ server: this.server, path: '/ws' });
     this.wss.on('connection', (socket) => this.handleConnection(socket));
 
+    // The WebSocket server re-emits the HTTP server's errors. Without a
+    // listener here, a failure to bind surfaces as an unhandled 'error' event
+    // and a stack trace instead of something a person can act on.
+    this.wss.on('error', (error) => console.warn('[ws] server error:', error.message));
+
     await new Promise<void>((resolve, reject) => {
-      this.server.once('error', reject);
+      const onError = (error: NodeJS.ErrnoException) => {
+        reject(
+          error.code === 'EADDRINUSE'
+            ? new Error(
+                `Port ${config.server.port} is already in use. ` +
+                  'Another AnyThing host may still be running, or something ' +
+                  'else has the port. Stop it, or set server.port in the config.'
+              )
+            : error
+        );
+      };
+      this.server.once('error', onError);
       this.server.listen(config.server.port, config.server.host, () => {
-        this.server.removeListener('error', reject);
+        this.server.removeListener('error', onError);
         resolve();
       });
     });
@@ -120,6 +137,9 @@ export class Transport {
     host.on('pages', (pages: Page[]) => this.broadcast({ t: 'pages', pages }));
     host.on('tiles', (plugin: string, tiles: Tile[]) =>
       this.broadcast({ t: 'tiles', plugin, tiles })
+    );
+    host.on('controls', (plugin: string, controls: ControlBindings) =>
+      this.broadcast({ t: 'controls', plugin, controls })
     );
     host.on('notice', (level: 'info' | 'warn' | 'error', message: string) =>
       this.broadcast({ t: 'notice', level, message })
@@ -174,7 +194,8 @@ export class Transport {
             version,
             platform: process.platform,
             arch: process.arch
-          }
+          },
+          input: config.input
         });
         this.send(socket, { t: 'pages', pages: host.pages() });
         return;

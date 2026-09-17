@@ -78,7 +78,7 @@ The UI targets 800×480 in landscape, in three rows of six tiles, with no
 scrolling and touch targets sized for a thumb. Under 720px wide it becomes a
 two-column scrolling list, which is what makes phone use tolerable.
 
-The dial and the four physical buttons are **not** wired up. The tile model has
-no concept of them yet, and a browser on the device only sees them if the image
-maps them to key events. Touch works, which is enough for everything the
-bundled plugins do.
+The dial, back button and four presets are wired up, and on the music page the
+dial is volume. What they emit is decided by the image you flashed, though, so
+the mapping is configurable and there is an inspector at `/#input` to show you
+what yours sends — see [CONTROLS.md](CONTROLS.md). Touch works regardless.

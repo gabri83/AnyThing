@@ -44,6 +44,7 @@ you the types; the bundled plugins under `server/src/plugins/` are the reference
 | `api.platform`, `api.arch` | `process.platform` / `process.arch`, for plugins supporting several |
 | `api.setTiles(tiles)` | Publish your page. Replaces your previous tiles |
 | `api.onAction(id, handler)` | Handle a press. `handler(payload)` may be async |
+| `api.setControls(bindings)` | Bind the dial and physical buttons to your actions ([CONTROLS.md](CONTROLS.md)) |
 | `api.every(ms, fn)` | Poll. Minimum 50ms. Runs immediately, then on the interval |
 | `api.serveFile(name, path)` | Serve a local file to the device; returns its URL |
 | `api.log`, `api.warn` | Namespaced logging — prefer these over `console` |
@@ -166,3 +167,14 @@ more useful on screen than swallowed.
 
 Pair each action with a fresh `setTiles` so the device reflects the result
 immediately rather than at the next poll.
+
+## Physical controls
+
+```js
+api.setControls({ rotate: 'volume', press: 'play-pause' });
+```
+
+Bindings apply only while your page is on screen, so the dial can mean one thing
+here and another elsewhere. The `rotate` action receives `{ delta }` — signed
+steps, several at once on a fast spin. [CONTROLS.md](CONTROLS.md) has the whole
+story, including how to find out what your device emits.
