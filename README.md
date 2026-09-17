@@ -37,6 +37,12 @@ Open that on anything with a browser — laptop, phone, iPad, or the Car Thing.
 The token moves into the browser's local storage on first load, so later visits
 work without the query string.
 
+To set up your macros, open the settings page on the Mac:
+
+```
+http://localhost:3000/#settings
+```
+
 **On first run macOS will ask for permission** to control Music (and, if you use
 keystroke macros, for Accessibility). Both prompts are expected; the plugins do
 nothing until you grant them.
@@ -67,9 +73,27 @@ mapping is configuration rather than a guess in the code. Open `/#input` on the
 device to see exactly what yours sends, then adjust `input.keymap`.
 [docs/CONTROLS.md](docs/CONTROLS.md) covers it.
 
+## Settings
+
+The host serves its own settings page at `http://localhost:3000/#settings`, or
+the gear icon in the controller's top bar. Four tabs:
+
+- **Macros** — add, edit, reorder and delete Stream Deck buttons, with a Test
+  button that runs one immediately. Saving applies without a restart.
+- **Plugins** — a switch per plugin, and a rescan button for a folder you just
+  dropped one into.
+- **Dial & buttons** — press Learn, then turn the dial, and it binds whatever
+  your device sent.
+- **Host** — port, listen address, token.
+
+It is a local web page rather than a native `.app`.
+[docs/SETTINGS.md](docs/SETTINGS.md) covers it, including who is allowed to
+change what and what wrapping it in a real Mac app would involve.
+
 ## Configuration
 
-Config lives at `~/.anything/config.json`, created on first run:
+Everything in the settings page is stored in `~/.anything/config.json`, which
+you can also edit by hand. It is created on first run:
 
 ```json
 {
@@ -105,6 +129,8 @@ can trigger your macros. So:
 
 - auth is **on by default** with a random token
 - a bad token is refused before any tile is sent
+- *changing* settings is refused from other machines unless you allow it: the
+  token lets you use the controller, not rewrite what its buttons run
 - `anything rotate-token` issues a new one
 - set `server.host` to `127.0.0.1` if you only ever use it on the Mac itself
 
@@ -157,8 +183,8 @@ is in [docs/PLUGINS.md](docs/PLUGINS.md), and the dial and buttons are in
 
 ```
 shared/   protocol, tile model, plugin contract (the API plugin authors use)
-server/   plugin host, transport, config, CLI, the three bundled plugins
-ui/       the device UI: renders tiles, sends presses
+server/   plugin host, transport, settings API, config, CLI, bundled plugins
+ui/       the device UI, plus the settings page served to the Mac
 examples/ a complete plugin you can copy
 ```
 

@@ -138,6 +138,10 @@ export function useConnection(): Connection {
           );
           break;
 
+        case 'input':
+          setInput(message.input);
+          break;
+
         case 'controls':
           setPages((current) =>
             current.map((page) =>

@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 import { randomBytes } from 'crypto';
-import { existsSync } from 'fs';
-import { readdir } from 'fs/promises';
 import { networkInterfaces } from 'os';
-import { join } from 'path';
 import {
   configPath,
   loadConfig,
@@ -11,7 +8,7 @@ import {
   userPluginDir,
   type AnythingConfig
 } from './config';
-import { builtinPlugins, loadPluginModule } from './loader';
+import { inventory, type PluginSummary } from './inventory';
 
 const USAGE = `AnyThing host CLI
 
@@ -22,6 +19,9 @@ const USAGE = `AnyThing host CLI
   anything disable <plugin>    disable a plugin
   anything rotate-token        issue a new token (devices must reload)
   anything config              print the config file path
+
+Most settings, including the macro buttons, are easier to edit in the settings
+page the host serves: http://localhost:<port>/#settings
 
 Config lives at ${configPath()}
 User plugins are loaded from ${userPluginDir()}
@@ -41,60 +41,8 @@ function deviceUrl(config: AnythingConfig): string {
   return config.auth.enabled ? `${base}/?token=${config.auth.token}` : `${base}/`;
 }
 
-interface PluginSummary {
-  id: string;
-  name: string;
-  version: string;
-  origin: 'built-in' | 'user';
-  enabled: boolean;
-  /** Set when the plugin cannot run here. */
-  note?: string;
-}
-
 async function summarize(config: AnythingConfig): Promise<PluginSummary[]> {
-  const summaries: PluginSummary[] = [];
-
-  const describe = (
-    manifest: { id: string; name: string; version: string; platforms?: string[] },
-    origin: 'built-in' | 'user'
-  ): PluginSummary => ({
-    id: manifest.id,
-    name: manifest.name,
-    version: manifest.version,
-    origin,
-    enabled: config.plugins[manifest.id]?.enabled !== false,
-    note:
-      manifest.platforms && !manifest.platforms.includes(process.platform)
-        ? `needs ${manifest.platforms.join('/')}, host is ${process.platform}`
-        : undefined
-  });
-
-  for (const plugin of builtinPlugins) {
-    summaries.push(describe(plugin.manifest, 'built-in'));
-  }
-
-  const dir = userPluginDir();
-  if (existsSync(dir)) {
-    for (const entry of (await readdir(dir)).sort()) {
-      if (entry.startsWith('.')) continue;
-      const entryPath = join(dir, entry, 'index.js');
-      if (!existsSync(entryPath)) continue;
-      try {
-        summaries.push(describe(loadPluginModule(entryPath).manifest, 'user'));
-      } catch (error) {
-        summaries.push({
-          id: entry,
-          name: entry,
-          version: '?',
-          origin: 'user',
-          enabled: false,
-          note: (error as Error).message
-        });
-      }
-    }
-  }
-
-  return summaries;
+  return inventory(config, userPluginDir());
 }
 
 async function setEnabled(id: string, enabled: boolean): Promise<void> {

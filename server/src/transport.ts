@@ -22,6 +22,8 @@ export interface TransportOptions {
   version: string;
   /** Directory of the built UI. Served at / when present. */
   uiDir?: string;
+  /** Settings API, mounted at /api. Omitted in tests that do not need it. */
+  api?: express.Router;
 }
 
 /** Constant-time token comparison, so a wrong token leaks no timing signal. */
@@ -39,7 +41,7 @@ function tokenMatches(expected: string, given: string | undefined): boolean {
  * so an unauthenticated connection never receives tiles.
  */
 export class Transport {
-  private readonly options: TransportOptions;
+  private options: TransportOptions;
   private readonly clients = new Set<WebSocket>();
   private app!: express.Express;
   private server!: http.Server;
@@ -49,10 +51,23 @@ export class Transport {
     this.options = options;
   }
 
+  /**
+   * Adopt a new config for auth and input. A changed host or port is not
+   * applied — the socket is already bound — so the caller must report that a
+   * restart is needed rather than pretending it took effect.
+   */
+  public setConfig(config: AnythingConfig): void {
+    this.options = { ...this.options, config };
+  }
+
   public async start(): Promise<void> {
     const { config, host, version, uiDir } = this.options;
 
     this.app = express();
+    // Behind no proxy, but this makes request.ip honest if one is added.
+    this.app.set('trust proxy', 'loopback');
+
+    if (this.options.api) this.app.use('/api', this.options.api);
 
     this.app.get('/healthz', (_req, res) => {
       res.json({ status: 'ok', version, plugins: host.ids() });
@@ -147,7 +162,7 @@ export class Transport {
   }
 
   private handleConnection(socket: WebSocket): void {
-    const { config, host, version } = this.options;
+    const { host, version } = this.options;
     let authenticated = false;
 
     // Drop a socket that never introduces itself, so a port scan cannot hold
@@ -170,6 +185,7 @@ export class Transport {
           socket.close(1008, 'Protocol mismatch');
           return;
         }
+        const { config } = this.options;
         if (config.auth.enabled && !tokenMatches(config.auth.token, message.token)) {
           console.warn(`[ws] rejected ${message.client}: bad token`);
           this.send(socket, {
@@ -195,7 +211,7 @@ export class Transport {
             platform: process.platform,
             arch: process.arch
           },
-          input: config.input
+          input: this.options.config.input
         });
         this.send(socket, { t: 'pages', pages: host.pages() });
         return;

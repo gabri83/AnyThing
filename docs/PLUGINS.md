@@ -28,7 +28,8 @@ module.exports = {
 };
 ```
 
-Install it at `~/.anything/plugins/<anything>/index.js` and restart the host.
+Install it at `~/.anything/plugins/<anything>/index.js`, then press **Rescan
+folder** on the Plugins tab of the settings page — or restart the host.
 Plain CommonJS, no build step. A plugin whose `setup` throws is rolled back and
 skipped with a logged reason — it cannot stop the host or other plugins from
 starting.

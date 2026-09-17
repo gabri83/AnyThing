@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useConnection } from './connection';
 import { useDeviceInput, type RawInputEvent } from './input';
 import { InputInspector } from './InputInspector';
+import { SettingsView } from './settings/SettingsView';
 import { TileView } from './tiles/TileView';
 
 /** Most recent events shown in the inspector. */
@@ -29,6 +30,7 @@ export function App() {
   const { status, deniedReason, pages, notice, input, invoke } = useConnection();
   const [activePlugin, setActivePlugin] = useState<string | null>(null);
   const [inspecting, closeInspector] = useHashFlag('input');
+  const [settingsOpen, closeSettings] = useHashFlag('settings');
   const [events, setEvents] = useState<RawInputEvent[]>([]);
 
   // Follow the host: keep the chosen page if it still exists, else fall back to
@@ -65,6 +67,10 @@ export function App() {
     inspectOnly: inspecting
   });
 
+  if (settingsOpen) {
+    return <SettingsView onClose={closeSettings} />;
+  }
+
   if (inspecting) {
     return (
       <div className="app">
@@ -96,6 +102,14 @@ export function App() {
             </button>
           ))}
         </div>
+        <a
+          className="bar-link"
+          href="#settings"
+          title="Settings"
+          aria-label="Settings"
+        >
+          {'\u2699'}
+        </a>
         {active?.controls?.rotate && (
           <span className="dial-hint" title="The dial controls this page">
             {'◌'}

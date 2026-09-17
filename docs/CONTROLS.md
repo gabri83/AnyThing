@@ -35,7 +35,12 @@ so you can find out what a button does without it muting your mic.
 
 ## Fixing the keymap
 
-In `~/.anything/config.json`:
+Easiest is the **Dial & buttons** tab of the settings page
+(`http://localhost:3000/#settings`): press Learn next to a gesture, then turn
+the dial or press the button, and whatever it sent is bound. See
+[SETTINGS.md](SETTINGS.md).
+
+By hand, in `~/.anything/config.json`:
 
 ```json
 {
@@ -70,8 +75,10 @@ In `~/.anything/config.json`:
   map still loads. If *every* entry is invalid the defaults come back, because a
   device with no working controls is worse than a wrong guess.
 
-Restart the host after editing. The keymap is sent to each device on connect, so
-there is nothing to configure per device.
+Editing by hand needs a host restart; saving from the settings page applies
+immediately and pushes the new keymap to devices that are already connected.
+Either way the mapping lives on the host, so there is nothing to configure per
+device.
 
 ## Why rotation is batched
 

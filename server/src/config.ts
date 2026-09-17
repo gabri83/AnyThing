@@ -24,6 +24,12 @@ export interface AnythingConfig {
      */
     enabled: boolean;
     token: string;
+    /**
+     * Allow settings writes from other machines. Off by default: editing
+     * macros writes shell commands the host will run, which is a bigger
+     * capability than triggering one someone already configured.
+     */
+    allowRemoteConfig: boolean;
   };
   /**
    * How the device's physical controls are read. Sent to every client, so the
@@ -36,7 +42,7 @@ export interface AnythingConfig {
 
 export const DEFAULT_CONFIG: AnythingConfig = {
   server: { host: '0.0.0.0', port: 3000 },
-  auth: { enabled: true, token: '' },
+  auth: { enabled: true, token: '', allowRemoteConfig: false },
   input: DEFAULT_INPUT_CONFIG,
   plugins: {}
 };
@@ -101,15 +107,23 @@ export function normalizeConfig(raw: unknown): AnythingConfig {
   const server = isRecord(source.server) ? source.server : {};
   const auth = isRecord(source.auth) ? source.auth : {};
 
+  // Port 0 is kept as-is and means "any free port", the usual convention. The
+  // real port is then only knowable after binding, which is why the printed
+  // URL comes from the listener rather than from this value.
   const port = Number(server.port);
   return {
     server: {
       host: typeof server.host === 'string' ? server.host : DEFAULT_CONFIG.server.host,
-      port: Number.isInteger(port) && port > 0 && port < 65536 ? port : DEFAULT_CONFIG.server.port
+      port:
+        Number.isInteger(port) && port >= 0 && port < 65536
+          ? port
+          : DEFAULT_CONFIG.server.port
     },
     auth: {
       enabled: typeof auth.enabled === 'boolean' ? auth.enabled : true,
-      token: typeof auth.token === 'string' ? auth.token : ''
+      token: typeof auth.token === 'string' ? auth.token : '',
+      allowRemoteConfig:
+        typeof auth.allowRemoteConfig === 'boolean' ? auth.allowRemoteConfig : false
     },
     input: normalizeInput(source.input),
     plugins: isRecord(source.plugins) ? (source.plugins as AnythingConfig['plugins']) : {}

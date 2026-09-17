@@ -72,6 +72,15 @@ export interface TilesMessage {
   tiles: Page['tiles'];
 }
 
+/**
+ * The keymap changed. Sent when settings are saved, so a device that is
+ * already connected picks up a re-learned dial without being reloaded.
+ */
+export interface InputMessage {
+  t: 'input';
+  input: InputConfig;
+}
+
 /** One plugin's control bindings changed. */
 export interface ControlsMessage {
   t: 'controls';
@@ -92,6 +101,7 @@ export type ServerMessage =
   | PagesMessage
   | TilesMessage
   | ControlsMessage
+  | InputMessage
   | NoticeMessage;
 
 export type AnyMessage = ClientMessage | ServerMessage;
@@ -156,6 +166,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     case 'pages':
     case 'tiles':
     case 'controls':
+    case 'input':
     case 'notice':
       return value as unknown as ServerMessage;
     default:

@@ -14,7 +14,7 @@ function config(overrides: Partial<AnythingConfig['auth']> = {}): AnythingConfig
     ...DEFAULT_CONFIG,
     // Port 0 lets the OS pick, so tests never collide with a real host.
     server: { host: '127.0.0.1', port: 0 },
-    auth: { enabled: true, token: TOKEN, ...overrides },
+    auth: { enabled: true, token: TOKEN, allowRemoteConfig: false, ...overrides },
     plugins: {}
   };
 }

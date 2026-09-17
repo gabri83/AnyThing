@@ -1,42 +1,18 @@
-import { networkInterfaces } from 'os';
-import { resolve } from 'path';
-import { loadConfig, userPluginDir } from './config';
-import { PluginHost } from './host';
-import { loadAll } from './loader';
-import { Transport } from './transport';
+import { Runtime, defaultUiDir } from './runtime';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { version } = require('../package.json') as { version: string };
 
-/** First non-loopback IPv4 address, for the URL to open on the device. */
-function lanAddress(): string | null {
-  for (const addresses of Object.values(networkInterfaces())) {
-    for (const address of addresses ?? []) {
-      if (address.family === 'IPv4' && !address.internal) return address.address;
-    }
-  }
-  return null;
-}
-
 async function main(): Promise<void> {
-  const config = await loadConfig();
-  const host = new PluginHost(config);
+  const runtime = await Runtime.start({ version, uiDir: defaultUiDir() });
+  const config = runtime.currentConfig();
 
-  await loadAll(host, userPluginDir());
-
-  const transport = new Transport({
-    config,
-    host,
-    version,
-    uiDir: resolve(__dirname, '..', '..', 'ui', 'dist')
-  });
-  await transport.start();
-
-  const address = lanAddress() ?? config.server.host;
-  const query = config.auth.enabled ? `/?token=${config.auth.token}` : '/';
   console.log('');
   console.log(`  AnyThing host v${version} ready`);
-  console.log(`  Open on your device:  http://${address}:${config.server.port}${query}`);
+  console.log(`  Open on your device:  ${runtime.deviceUrl()}`);
+  console.log(
+    `  Settings on this Mac: http://localhost:${config.server.port}/#settings`
+  );
   if (!config.auth.enabled) {
     console.log('  Auth is DISABLED: anyone on this network can trigger your macros.');
   }
@@ -47,8 +23,7 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`\nReceived ${signal}, shutting down`);
-    await transport.stop();
-    await host.teardown();
+    await runtime.stop();
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));

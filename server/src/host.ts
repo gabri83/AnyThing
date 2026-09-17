@@ -38,10 +38,19 @@ interface LoadedPlugin {
  */
 export class PluginHost extends EventEmitter {
   private readonly plugins = new Map<string, LoadedPlugin>();
-  private readonly config: AnythingConfig;
+  private config: AnythingConfig;
 
   constructor(config: AnythingConfig) {
     super();
+    this.config = config;
+  }
+
+  /**
+   * Swap the config used for subsequent registrations. Already-loaded plugins
+   * keep the config they were set up with, so this is only meaningful together
+   * with a teardown and reload.
+   */
+  public setConfig(config: AnythingConfig): void {
     this.config = config;
   }
 
