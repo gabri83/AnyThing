@@ -59,7 +59,7 @@ export function buildTiles(
     {
       kind: 'button',
       id: 'volume-down',
-      label: 'Volume',
+      label: 'Down',
       icon: '−',
       action: ACTIONS.volumeDown
     },
@@ -76,7 +76,7 @@ export function buildTiles(
     {
       kind: 'button',
       id: 'volume-up',
-      label: 'Volume',
+      label: 'Up',
       icon: '+',
       action: ACTIONS.volumeUp
     },

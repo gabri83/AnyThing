@@ -1,3 +1,6 @@
+import { mkdtemp, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { definePlugin, PROTOCOL_VERSION, type ServerMessage } from '@anything/shared';
 import { WebSocket } from 'ws';
 import { DEFAULT_CONFIG, type AnythingConfig } from './config';
@@ -186,6 +189,45 @@ describe('Transport', () => {
     );
 
     expect(frames.map((frame) => frame.t)).toEqual(['welcome', 'pages']);
+  });
+});
+
+describe('Transport serving a built UI', () => {
+  // Regression: Express 5 rejects a bare '*' route, so the SPA fallback has to
+  // be middleware. That path only runs when a built UI directory exists.
+  it('starts with a uiDir and serves index.html for an unknown path', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'anything-ui-'));
+    await writeFile(join(dir, 'index.html'), '<!doctype html><title>ui</title>', 'utf8');
+
+    const host = new PluginHost(config());
+    const transport = new Transport({
+      config: config(),
+      host,
+      version: 'test',
+      uiDir: dir
+    });
+
+    await expect(transport.start()).resolves.toBeUndefined();
+
+    try {
+      const base = `http://127.0.0.1:${transport.port()}`;
+
+      const root = await fetch(`${base}/`);
+      expect(root.status).toBe(200);
+      expect(await root.text()).toContain('<title>ui</title>');
+
+      // A deep link the UI owns must still return the app shell.
+      const deep = await fetch(`${base}/some/client/route`);
+      expect(deep.status).toBe(200);
+      expect(await deep.text()).toContain('<title>ui</title>');
+
+      // API routes must still win over the fallback.
+      const health = await fetch(`${base}/healthz`);
+      expect(await health.json()).toMatchObject({ status: 'ok' });
+    } finally {
+      await transport.stop();
+      await host.teardown();
+    }
   });
 });
 

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'crypto';
 import { existsSync } from 'fs';
 import http from 'http';
+import { join } from 'path';
 import { hostname } from 'os';
 import express from 'express';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -80,7 +81,15 @@ export class Transport {
 
     if (uiDir && existsSync(uiDir)) {
       this.app.use(express.static(uiDir));
-      this.app.get('*', (_req, res) => res.sendFile(`${uiDir}/index.html`));
+      // Single-page fallback as middleware rather than a wildcard route:
+      // Express 5's path-to-regexp rejects a bare '*' pattern.
+      this.app.use((request, response, next) => {
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+          next();
+          return;
+        }
+        response.sendFile(join(uiDir, 'index.html'));
+      });
     } else {
       this.app.get('/', (_req, res) => {
         res

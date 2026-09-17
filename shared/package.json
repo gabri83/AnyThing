@@ -2,13 +2,21 @@
   "name": "@anything/shared",
   "version": "1.0.0",
   "description": "Shared protocol, tile model and plugin contract for AnyThing",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/cjs/index.js",
+  "types": "dist/cjs/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.esm.json",
     "clean": "rm -rf dist"
   },
   "files": [
     "dist"
-  ]
+  ],
+  "module": "dist/esm/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  }
 }
