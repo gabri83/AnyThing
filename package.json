@@ -10,14 +10,16 @@
     "ui"
   ],
   "scripts": {
-    "build": "npm run build -w @anything/shared && npm run build -w @anything/server && npm run build -w @anything/ui",
+    "build": "npm run build -w @anything/shared && npm run build -w @anything/server && npm run build -w @anything/ui && npm run check:device",
     "start": "npm run start -w @anything/server",
     "dev": "npm run dev -w @anything/server",
     "dev:ui": "npm run dev -w @anything/ui",
     "test": "npm run test -w @anything/server",
     "typecheck": "npm run build -w @anything/shared && tsc -p server --noEmit && tsc -p ui --noEmit",
     "cli": "node server/dist/cli.js",
-    "clean": "rm -rf shared/dist server/dist ui/dist"
+    "clean": "rm -rf shared/dist server/dist ui/dist",
+    "check:device": "node scripts/check-device-compat.mjs",
+    "find-device": "bash scripts/find-carthing.sh"
   },
   "keywords": [
     "carthing",
@@ -29,5 +31,8 @@
   ],
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "acorn": "^8.14.0"
   }
 }

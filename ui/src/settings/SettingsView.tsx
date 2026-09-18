@@ -4,6 +4,7 @@ import { MacrosEditor, validateDrafts, type MacroDraft } from './MacrosEditor';
 import { PluginsPanel } from './PluginsPanel';
 import { ServerPanel } from './ServerPanel';
 import { api, type PluginSummary, type SettingsPayload } from './client';
+import './settings.css';
 
 type Tab = 'macros' | 'plugins' | 'controls' | 'host';
 

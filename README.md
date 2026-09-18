@@ -58,12 +58,24 @@ nothing until you grant them.
 
 The Car Thing is an Amlogic S905D3 board running Linux with an 800×480
 touchscreen. It is not driven over USB: you flash it once with community
-tooling, after which it runs a browser you point at your Mac. AnyThing is just a
-web page to it, which is why you can use all of this today from a laptop and
-sort the hardware out later.
+tooling, after which it runs a Chromium kiosk you point at your Mac. AnyThing is
+just a web page to it, which is why you can use all of this today from a laptop
+and sort the hardware out later.
 
-See [docs/DEVICE.md](docs/DEVICE.md) for how to tell what is currently on your
-device and how to point it here.
+With the device plugged in:
+
+```bash
+npm run find-device
+```
+
+That finds it over USB networking, works out which address it must call back
+on, and prints the steps to repoint its kiosk. It only looks; it changes
+nothing. [docs/DEVICE.md](docs/DEVICE.md) has the detail, including the
+Nocturne path.
+
+**The device's browser is Chromium 69 era.** That is not a detail — optional
+chaining alone would turn the screen blank. The UI builds for `chrome69` and
+`npm run check:device` fails the build if anything newer creeps in.
 
 ### The dial and buttons
 
@@ -186,16 +198,19 @@ shared/   protocol, tile model, plugin contract (the API plugin authors use)
 server/   plugin host, transport, settings API, config, CLI, bundled plugins
 ui/       the device UI, plus the settings page served to the Mac
 examples/ a complete plugin you can copy
+scripts/  device compatibility gate, and the Car Thing finder
 ```
 
 ## Development
 
 ```bash
-npm run build       # shared, then server, then ui
-npm test            # server suite
-npm run typecheck   # all three workspaces
-npm run dev         # host with ts-node
-npm run dev:ui      # Vite dev server on :5173, proxying to a host on :3000
+npm run build         # shared, then server, then ui, then the device check
+npm test              # server suite
+npm run typecheck     # all three workspaces
+npm run check:device  # bundle parses as ES2019, device CSS is Chromium 69 safe
+npm run find-device   # locate a Car Thing attached to this Mac
+npm run dev           # host with ts-node
+npm run dev:ui        # Vite dev server on :5173, proxying to a host on :3000
 ```
 
 ## License

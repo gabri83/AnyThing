@@ -40,9 +40,25 @@ function tokenMatches(expected: string, given: string | undefined): boolean {
  * over. A socket counts as a client only once it has sent an accepted `hello`,
  * so an unauthenticated connection never receives tiles.
  */
+/** What a connected device told us about itself. */
+export interface ClientInfo {
+  /** The name the client sent in `hello`. */
+  name: string;
+  /** Browser user agent from the upgrade request, or null if it sent none. */
+  userAgent: string | null;
+  address: string | null;
+  connectedAt: string;
+}
+
 export class Transport {
   private options: TransportOptions;
   private readonly clients = new Set<WebSocket>();
+  /**
+   * Per-socket details, kept so `/status` can report what is actually
+   * connected. The Car Thing's browser version decides what the UI may use,
+   * and reading it off the real device beats assuming.
+   */
+  private readonly clientInfo = new Map<WebSocket, ClientInfo>();
   private app!: express.Express;
   private server!: http.Server;
   private wss!: WebSocketServer;
@@ -79,6 +95,7 @@ export class Transport {
         platform: process.platform,
         arch: process.arch,
         clients: this.clients.size,
+        connected: this.connectedClients(),
         plugins: host.ids(),
         authRequired: config.auth.enabled
       });
@@ -123,7 +140,12 @@ export class Transport {
 
     this.server = http.createServer(this.app);
     this.wss = new WebSocketServer({ server: this.server, path: '/ws' });
-    this.wss.on('connection', (socket) => this.handleConnection(socket));
+    this.wss.on('connection', (socket, request) =>
+      this.handleConnection(socket, {
+        userAgent: request.headers['user-agent'] ?? null,
+        address: request.socket.remoteAddress ?? null
+      })
+    );
 
     // The WebSocket server re-emits the HTTP server's errors. Without a
     // listener here, a failure to bind surfaces as an unhandled 'error' event
@@ -161,7 +183,10 @@ export class Transport {
     );
   }
 
-  private handleConnection(socket: WebSocket): void {
+  private handleConnection(
+    socket: WebSocket,
+    origin: { userAgent: string | null; address: string | null }
+  ): void {
     const { host, version } = this.options;
     let authenticated = false;
 
@@ -200,7 +225,18 @@ export class Transport {
         authenticated = true;
         clearTimeout(helloTimer);
         this.clients.add(socket);
+        this.clientInfo.set(socket, {
+          name: message.client,
+          userAgent: origin.userAgent,
+          address: origin.address,
+          connectedAt: new Date().toISOString()
+        });
         console.log(`[ws] ${message.client} connected (${this.clients.size} total)`);
+        if (origin.userAgent) {
+          // Printed once per connection: this is how you find out which
+          // Chromium the device is really running.
+          console.log(`[ws]   ${origin.userAgent}`);
+        }
 
         this.send(socket, {
           t: 'welcome',
@@ -226,6 +262,7 @@ export class Transport {
 
     socket.on('close', () => {
       clearTimeout(helloTimer);
+      this.clientInfo.delete(socket);
       if (this.clients.delete(socket)) {
         console.log(`[ws] client disconnected (${this.clients.size} remaining)`);
       }
@@ -233,6 +270,7 @@ export class Transport {
 
     socket.on('error', (error) => {
       console.warn('[ws] socket error:', error.message);
+      this.clientInfo.delete(socket);
       this.clients.delete(socket);
     });
   }
@@ -254,6 +292,11 @@ export class Transport {
     return this.clients.size;
   }
 
+  /** Details of every authenticated client, for `/status` and the CLI. */
+  public connectedClients(): ClientInfo[] {
+    return [...this.clientInfo.values()];
+  }
+
   /** The port actually bound. Differs from config when port 0 was requested. */
   public port(): number {
     const address = this.server.address();
@@ -263,6 +306,7 @@ export class Transport {
   public async stop(): Promise<void> {
     for (const client of this.clients) client.close(1001, 'Host shutting down');
     this.clients.clear();
+    this.clientInfo.clear();
     await new Promise<void>((resolve) => this.wss.close(() => resolve()));
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
   }

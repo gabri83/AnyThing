@@ -26,6 +26,10 @@ jobs:
 
       - run: npm run typecheck
 
+      # The Car Thing's browser is Chromium 69 era, where anything newer in the
+      # bundle is a blank screen rather than a degraded one.
+      - run: npm run check:device
+
   build-macos:
     # The macOS-only plugins are skipped on Linux, so at least compile and run
     # the suite on the platform they are written for.
