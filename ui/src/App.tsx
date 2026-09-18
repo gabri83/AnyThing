@@ -1,31 +1,161 @@
-import styled from 'styled-components';
-import { useWebSocket } from './hooks/useWebSocket';
-import { NowPlaying } from './components/NowPlaying';
-import { Controls } from './components/Controls';
+import { useCallback, useEffect, useState } from 'react';
+import { useConnection } from './connection';
+import { useDeviceInput, type RawInputEvent } from './input';
+import { InputInspector } from './InputInspector';
+import { SettingsView } from './settings/SettingsView';
+import { TileView } from './tiles/TileView';
 
-const AppContainer = styled.div`
-  width: 480px;
-  height: 800px;
-  background: #000;
-  color: #fff;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-`;
+/** Most recent events shown in the inspector. */
+const EVENT_LOG_LIMIT = 12;
+
+/** The inspector is opened by visiting /#input, so it needs no tile of its own. */
+function useHashFlag(flag: string): [boolean, () => void] {
+  const [on, setOn] = useState(() => window.location.hash === `#${flag}`);
+
+  useEffect(() => {
+    const sync = () => setOn(window.location.hash === `#${flag}`);
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, [flag]);
+
+  const clear = useCallback(() => {
+    window.history.replaceState({}, '', window.location.pathname);
+    setOn(false);
+  }, []);
+
+  return [on, clear];
+}
 
 export function App() {
-  const { connected } = useWebSocket();
+  const { status, deniedReason, pages, notice, input, invoke } = useConnection();
+  const [activePlugin, setActivePlugin] = useState<string | null>(null);
+  const [inspecting, closeInspector] = useHashFlag('input');
+  const [settingsOpen, closeSettings] = useHashFlag('settings');
+  const [events, setEvents] = useState<RawInputEvent[]>([]);
+
+  // Follow the host: keep the chosen page if it still exists, else fall back to
+  // the first one. This survives a plugin being disabled while the device is on.
+  useEffect(() => {
+    if (pages.length === 0) {
+      setActivePlugin(null);
+      return;
+    }
+    setActivePlugin((current) =>
+      current && pages.some((page) => page.plugin === current)
+        ? current
+        : pages[0].plugin
+    );
+  }, [pages]);
+
+  const active = pages.find((page) => page.plugin === activePlugin) ?? null;
+
+  const recordEvent = useCallback((event: RawInputEvent) => {
+    setEvents((current) => [event, ...current].slice(0, EVENT_LOG_LIMIT));
+  }, []);
+
+  // The dial, back button and presets belong to whichever page is showing, so
+  // the same hardware means volume here and something else elsewhere.
+  useDeviceInput({
+    input,
+    bindings: active?.controls,
+    invoke: (action, payload) => {
+      if (active) invoke(active.plugin, action, payload);
+    },
+    onRaw: inspecting ? recordEvent : undefined,
+    // While inspecting, report events without firing actions: you should be
+    // able to find out what a button does without it muting your mic.
+    inspectOnly: inspecting
+  });
+
+  if (settingsOpen) {
+    return <SettingsView onClose={closeSettings} />;
+  }
+
+  if (inspecting) {
+    return (
+      <div className="app">
+        <InputInspector
+          input={input}
+          bindings={active?.controls}
+          events={events}
+          onClose={closeInspector}
+        />
+      </div>
+    );
+  }
 
   return (
-    <AppContainer>
-      {!connected ? (
-        <div>Connecting to host...</div>
+    <div className="app">
+      <div className="bar">
+        <div className="tabs" role="tablist">
+          {pages.map((page) => (
+            <button
+              key={page.plugin}
+              type="button"
+              role="tab"
+              className="tab"
+              aria-selected={page.plugin === activePlugin}
+              onClick={() => setActivePlugin(page.plugin)}
+            >
+              {page.icon && <span className="tab-icon">{page.icon}</span>}
+              {page.title}
+            </button>
+          ))}
+        </div>
+        <a
+          className="bar-link"
+          href="#settings"
+          title="Settings"
+          aria-label="Settings"
+        >
+          {'\u2699'}
+        </a>
+        {active?.controls?.rotate && (
+          <span className="dial-hint" title="The dial controls this page">
+            {'◌'}
+          </span>
+        )}
+        <span
+          className="status-dot"
+          data-status={status}
+          title={`Connection: ${status}`}
+        />
+      </div>
+
+      {status === 'denied' ? (
+        <div className="overlay">
+          <h1>Not allowed in</h1>
+          <p>{deniedReason}</p>
+          <p>
+            Run <code>anything url</code> on your Mac and open the link it prints.
+          </p>
+        </div>
+      ) : pages.length === 0 ? (
+        <div className="overlay">
+          <h1>{status === 'open' ? 'No plugins loaded' : 'Looking for the host'}</h1>
+          <p>
+            {status === 'open'
+              ? 'The host is running but every plugin is disabled or unsupported here.'
+              : 'Reconnecting automatically. Check that the host is running on your Mac.'}
+          </p>
+        </div>
       ) : (
-        <>
-          <NowPlaying />
-          <Controls />
-        </>
+        <div className="grid">
+          {active?.tiles.map((tile) => (
+            <TileView
+              key={tile.id}
+              tile={tile}
+              invoke={(action, payload) => invoke(active.plugin, action, payload)}
+            />
+          ))}
+        </div>
       )}
-    </AppContainer>
+
+      {notice && (
+        <div className="toast" data-level={notice.level} key={notice.key}>
+          {notice.message}
+        </div>
+      )}
+    </div>
   );
 }

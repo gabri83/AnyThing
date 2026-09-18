@@ -34,3 +34,9 @@ logs/
 
 # Configuration backups
 *.config.json.bak
+# Build output
+dist/
+*.tsbuildinfo
+
+# Local host state
+.anything/
