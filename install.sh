@@ -139,7 +139,7 @@ uninstall() {
   local app="$1" candidate
   if [ "$(uname -s)" = "Darwin" ] && [ -x "$app/server/dist/cli.js" ]; then
     say "Stopping the host"
-    "$app/server/dist/cli.js" service uninstall || true
+    "$app/server/dist/cli.js" service uninstall --if-mine || true
   fi
   for candidate in "${ANYTHING_BIN_DIR:-}" "$HOME/.local/bin" /usr/local/bin /opt/homebrew/bin; do
     # Only remove a link that points at this install.

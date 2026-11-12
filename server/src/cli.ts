@@ -22,6 +22,7 @@ import {
   installService,
   logPath,
   restartService,
+  serviceIsOurs,
   serviceStatus,
   uninstallService
 } from './service';
@@ -160,7 +161,13 @@ function attached(command: string, args: string[], cwd?: string): Promise<number
   });
 }
 
-async function serviceCommand(action: string | undefined): Promise<number> {
+async function serviceCommand(action: string | undefined, flags: string[] = []): Promise<number> {
+  // Two copies can be on one Mac (an install and a checkout) but there is one
+  // background service. Removing a copy must not stop the other one's host.
+  if (action === 'uninstall' && flags.includes('--if-mine') && !(await serviceIsOurs())) {
+    console.log('The background service belongs to another copy of AnyThing; left alone.');
+    return 0;
+  }
   switch (action) {
     case undefined:
     case 'status': {
@@ -358,7 +365,7 @@ async function main(argv: string[]): Promise<number> {
       return attached(process.execPath, [join(__dirname, 'index.js')]);
 
     case 'service':
-      return serviceCommand(argument);
+      return serviceCommand(argument, argv.slice(2));
 
     case 'update':
       return updateCommand();

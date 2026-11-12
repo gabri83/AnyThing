@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import { existsSync, realpathSync } from 'fs';
-import { mkdir, rm, writeFile } from 'fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { homedir, userInfo } from 'os';
 import { delimiter, dirname, join, resolve } from 'path';
 import { promisify } from 'util';
@@ -192,6 +192,16 @@ export async function installService(layout: ServiceLayout = currentLayout()): P
   await stopAgent();
   await writeFile(plistPath(), servicePlist(layout), 'utf8');
   await launchctl('bootstrap', domain(), plistPath());
+}
+
+/** Whether the installed agent runs this copy of AnyThing rather than another. */
+export async function serviceIsOurs(layout: ServiceLayout = currentLayout()): Promise<boolean> {
+  try {
+    const plist = await readFile(plistPath(), 'utf8');
+    return plist.includes(`<string>${escapeXml(layout.entry)}</string>`);
+  } catch {
+    return false;
+  }
 }
 
 export async function uninstallService(): Promise<void> {
