@@ -13,7 +13,18 @@ import {
   installOnDevice,
   uninstallFromDevice
 } from './device/install';
+import { spawn } from 'child_process';
+import { existsSync } from 'fs';
+import { join, resolve } from 'path';
 import { createInterface } from 'readline';
+import {
+  currentLayout,
+  installService,
+  logPath,
+  restartService,
+  serviceStatus,
+  uninstallService
+} from './service';
 import {
   installPlugin,
   listInstalled,
@@ -24,6 +35,14 @@ import {
 import { inventory, type PluginSummary } from './inventory';
 
 const USAGE = `AnyThing host CLI
+
+  anything start               run the host here, in the foreground
+  anything service             is the host running in the background?
+  anything service install     run it in the background, now and at every login
+  anything service uninstall   stop that
+  anything service restart     restart it
+  anything service logs        follow its log
+  anything update              fetch the latest version, rebuild and restart
 
   anything url                 print the URL to open on your device
   anything status              show config, token and plugin state
@@ -130,6 +149,80 @@ async function loadedIds(port: number): Promise<string[] | null> {
   } catch {
     return null;
   }
+}
+
+/** Run a program attached to this terminal and resolve with its exit code. */
+function attached(command: string, args: string[], cwd?: string): Promise<number> {
+  return new Promise((done, failed) => {
+    const child = spawn(command, args, { stdio: 'inherit', cwd });
+    child.on('error', failed);
+    child.on('exit', (code) => done(code ?? 1));
+  });
+}
+
+async function serviceCommand(action: string | undefined): Promise<number> {
+  switch (action) {
+    case undefined:
+    case 'status': {
+      const status = await serviceStatus();
+      if (!status.installed) {
+        console.log('The host is not set up to run in the background.');
+        console.log('Set it up with: anything service install');
+        return 0;
+      }
+      console.log(
+        status.running
+          ? `running    pid ${status.pid ?? '?'}, starts at login`
+          : 'stopped    installed, but not running right now'
+      );
+      if (status.entry) console.log(`runs       ${status.entry}`);
+      console.log(`log        ${logPath()}`);
+      return 0;
+    }
+    case 'install': {
+      const layout = currentLayout();
+      await installService(layout);
+      console.log('The host is running in the background and will start at every login.');
+      console.log(`It runs from ${layout.workingDirectory}; its log is ${layout.log}`);
+      return 0;
+    }
+    case 'uninstall':
+      await uninstallService();
+      console.log('Stopped. The host no longer runs in the background.');
+      return 0;
+    case 'restart':
+      await restartService();
+      console.log('Restarted.');
+      return 0;
+    case 'logs':
+      return attached('tail', ['-n', '40', '-f', logPath()]);
+    default:
+      console.error('Usage: anything service [status|install|uninstall|restart|logs]');
+      return 1;
+  }
+}
+
+/**
+ * Update by running the installer again: it is the one place that knows how
+ * to fetch, build and restart. A checkout somebody is developing in is left to
+ * them.
+ */
+async function updateCommand(): Promise<number> {
+  const root = resolve(__dirname, '..', '..');
+  const installer = join(root, 'install.sh');
+  if (!existsSync(installer)) {
+    console.error(`Cannot find ${installer}. Update by running the install command again.`);
+    return 1;
+  }
+  const managed = resolve(
+    process.env.ANYTHING_HOME ?? join(process.env.HOME ?? '', '.anything', 'app')
+  );
+  if (root !== managed) {
+    console.error(`This copy lives in ${root}, which you manage yourself.`);
+    console.error('Update it with:  git pull && ./install.sh --here');
+    return 1;
+  }
+  return attached('bash', [installer]);
 }
 
 async function pluginCommand(argv: string[]): Promise<number> {
@@ -260,6 +353,15 @@ async function main(argv: string[]): Promise<number> {
 
     case 'plugin':
       return pluginCommand(argv.slice(1));
+
+    case 'start':
+      return attached(process.execPath, [join(__dirname, 'index.js')]);
+
+    case 'service':
+      return serviceCommand(argument);
+
+    case 'update':
+      return updateCommand();
 
     case 'enable':
     case 'disable': {

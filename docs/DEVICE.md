@@ -51,7 +51,7 @@ Out of the box the device boots to Bridgething's own page and the host takes
 the screen a couple of seconds later. To make it start on AnyThing instead:
 
 ```bash
-node server/dist/cli.js device install
+anything device install
 ```
 
 That writes two files to the device's writable partition: a small splash page,
@@ -61,7 +61,7 @@ AnyThing splash, which hands over as soon as the host is reachable. Plugged
 into a charger or another computer it stays on the splash and, after a few
 seconds, offers "Use the device without a Mac", which opens Bridgething's own
 interface. Nothing in the firmware is modified;
-`node server/dist/cli.js device uninstall` removes both files.
+`anything device uninstall` removes both files.
 
 ### Checking what is on the screen
 
@@ -93,7 +93,7 @@ connector above is written for Bridgething. On Nocturne, repoint the kiosk by
 hand:
 
 1. Set `server.host` to `0.0.0.0` in the config so the device can reach the
-   host, then `node server/dist/cli.js url` for a URL with the token
+   host, then `anything url` for a URL with the token
 2. `npm run find-device` to confirm the device answers and which address it
    must call back on
 3. `ssh root@nocturne.local` (password `nocturne`), `mount -o remount,rw /`

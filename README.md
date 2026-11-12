@@ -20,14 +20,37 @@ Everything the bundled plugins do goes through the same public plugin API, so a
 plugin you write has exactly the capabilities they have — including the dial and
 the physical buttons.
 
-## Quickstart
+## Install
+
+On a Mac with [Node.js](https://nodejs.org) 18 or newer and git:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gabri83/AnyThing/main/install.sh | bash
+```
+
+That fetches AnyThing into `~/.anything/app`, builds it, puts an `anything`
+command on your PATH and starts the host in the background, now and at every
+login. Nothing needs sudo. Read [`install.sh`](install.sh) first if you like to
+know what a piped script does.
+
+```bash
+anything service      # is it running?
+anything update       # fetch the latest version, rebuild, restart
+anything help         # everything else
+```
+
+To remove it: `bash ~/.anything/app/install.sh --uninstall`. Your settings and
+plugins in `~/.anything` are kept.
+
+### From a clone
 
 ```bash
 git clone https://github.com/gabri83/AnyThing.git
 cd AnyThing
 npm install
 npm run build
-npm start
+npm start                # in the foreground, or:
+./install.sh --here      # link the anything command and run this checkout in the background
 ```
 
 ```
@@ -156,18 +179,18 @@ whole network. The host says so loudly at startup if you do.
 ## CLI
 
 ```bash
-node server/dist/cli.js url        # the URL to open on the device
-node server/dist/cli.js status     # config path, port, auth, plugin count
-node server/dist/cli.js plugins    # what is loaded, and why something is not
-node server/dist/cli.js disable macros
-node server/dist/cli.js rotate-token
+anything url        # the URL to open on the device
+anything status     # config path, port, auth, plugin count
+anything plugins    # what is loaded, and why something is not
+anything disable macros
+anything rotate-token
 ```
 
 ```bash
-node server/dist/cli.js todo "Buy milk"     # add to the to-do page
-node server/dist/cli.js device              # is a Car Thing attached?
-node server/dist/cli.js device install      # start on AnyThing at power-on
-node server/dist/cli.js device uninstall    # put the firmware's start page back
+anything todo "Buy milk"     # add to the to-do page
+anything device              # is a Car Thing attached?
+anything device install      # start on AnyThing at power-on
+anything device uninstall    # put the firmware's start page back
 ```
 
 `npm link -w @anything/server` puts it on your PATH as `anything`.
@@ -201,12 +224,12 @@ with every tile kind is in [`examples/hello-world`](examples/hello-world).
 ### Installing someone else's
 
 ```bash
-node server/dist/cli.js plugin add someone/anything-plugin-weather   # a GitHub repository
-node server/dist/cli.js plugin add someone/anything-plugin-weather#v1.2
-node server/dist/cli.js plugin add ./examples/hello-world            # or a folder
-node server/dist/cli.js plugin list
-node server/dist/cli.js plugin update weather
-node server/dist/cli.js plugin remove weather
+anything plugin add someone/anything-plugin-weather   # a GitHub repository
+anything plugin add someone/anything-plugin-weather#v1.2
+anything plugin add ./examples/hello-world            # or a folder
+anything plugin list
+anything plugin update weather
+anything plugin remove weather
 ```
 
 A running host loads the plugin straight away; its page appears on the device
