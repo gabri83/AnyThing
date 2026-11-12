@@ -1,11 +1,17 @@
+import { randomBytes } from 'crypto';
 import { EventEmitter } from 'events';
 import { isAbsolute } from 'path';
 import type {
   ActionHandler,
   ControlBindings,
+  HookRequest,
+  HookResponse,
   Page,
   Plugin,
   PluginApi,
+  PromptOptions,
+  PromptSpec,
+  RequestHandler,
   Tile
 } from '@anything/shared';
 import { type AnythingConfig, pluginConfig } from './config';
@@ -23,6 +29,22 @@ interface LoadedPlugin {
   timers: NodeJS.Timeout[];
   /** Served file name -> absolute path on disk. */
   files: Map<string, string>;
+  /** Webhook path -> handler. */
+  requests: Map<string, RequestHandler>;
+}
+
+/** A prompt on screen, as sent to devices. */
+export type ActivePrompt = PromptSpec & { id: string; plugin: string };
+
+interface PendingPrompt {
+  prompt: ActivePrompt;
+  resolve: (choice: string | null) => void;
+  timer: NodeJS.Timeout | null;
+}
+
+/** Webhook paths are compared without leading or trailing slashes. */
+function normalizeHookPath(path: string): string {
+  return path.replace(/^\/+|\/+$/g, '');
 }
 
 /**
@@ -35,9 +57,13 @@ interface LoadedPlugin {
  *   'tiles'    (pluginId: string, tiles: Tile[])   one plugin's tiles changed
  *   'controls' (pluginId: string, ControlBindings) one plugin's bindings changed
  *   'notice'   (level, message)                    transient message for devices
+ *   'prompts'  (prompts: ActivePrompt[])           the set awaiting an answer changed
+ *   'focus'    (pluginId: string)                  a plugin wants its page in front
  */
 export class PluginHost extends EventEmitter {
   private readonly plugins = new Map<string, LoadedPlugin>();
+  /** Prompts awaiting an answer, in the order they were asked. */
+  private readonly prompts = new Map<string, PendingPrompt>();
   private config: AnythingConfig;
 
   constructor(config: AnythingConfig) {
@@ -90,7 +116,8 @@ export class PluginHost extends EventEmitter {
       actions: new Map(),
       controls: {},
       timers: [],
-      files: new Map()
+      files: new Map(),
+      requests: new Map()
     };
     this.plugins.set(manifest.id, entry);
 
@@ -178,8 +205,97 @@ export class PluginHost extends EventEmitter {
 
       notify: (level: NoticeLevel, message: string) => {
         this.emit('notice', level, message);
+      },
+
+      prompt: (spec: PromptSpec, options: PromptOptions = {}) => {
+        if (!spec || typeof spec.title !== 'string' || !Array.isArray(spec.choices)) {
+          throw new Error('prompt() needs a title and a choices array');
+        }
+        if (spec.choices.length === 0) {
+          throw new Error('prompt() needs at least one choice');
+        }
+        const promptId = options.id ?? randomBytes(6).toString('hex');
+        // Re-asking under the same id replaces the earlier prompt.
+        this.settlePrompt(promptId, null);
+
+        return new Promise<string | null>((resolve) => {
+          const timeout = options.timeoutMs;
+          const timer =
+            typeof timeout === 'number' && timeout > 0
+              ? setTimeout(() => this.settlePrompt(promptId, null), timeout)
+              : null;
+          this.prompts.set(promptId, {
+            prompt: { ...spec, id: promptId, plugin: id },
+            resolve,
+            timer
+          });
+          this.emit('prompts', this.pendingPrompts());
+        });
+      },
+
+      dismissPrompt: (promptId: string) => {
+        if (this.prompts.get(promptId)?.prompt.plugin === id) {
+          this.settlePrompt(promptId, null);
+        }
+      },
+
+      onRequest: (path: string, handler: RequestHandler) => {
+        entry.requests.set(normalizeHookPath(path), handler);
+      },
+
+      focus: () => {
+        this.emit('focus', id);
       }
     };
+  }
+
+  /** Resolve a prompt and take it off the screens. Unknown ids are ignored. */
+  private settlePrompt(promptId: string, choice: string | null): boolean {
+    const pending = this.prompts.get(promptId);
+    if (!pending) return false;
+    this.prompts.delete(promptId);
+    if (pending.timer) clearTimeout(pending.timer);
+    pending.resolve(choice);
+    this.emit('prompts', this.pendingPrompts());
+    return true;
+  }
+
+  /** Prompts awaiting an answer, oldest first. */
+  public pendingPrompts(): ActivePrompt[] {
+    return [...this.prompts.values()].map((pending) => pending.prompt);
+  }
+
+  /**
+   * A device answered a prompt. Returns false when the prompt is gone or the
+   * choice is not one it offered — a stale screen must not answer for the user.
+   */
+  public answerPrompt(promptId: string, choice: string): boolean {
+    const pending = this.prompts.get(promptId);
+    if (!pending) return false;
+    if (!pending.prompt.choices.some((candidate) => candidate.id === choice)) {
+      return false;
+    }
+    return this.settlePrompt(promptId, choice);
+  }
+
+  /**
+   * Route a webhook request to the plugin that registered the path. Returns
+   * null when no plugin did, so the caller can answer 404.
+   */
+  public async handleRequest(
+    pluginId: string,
+    path: string,
+    request: HookRequest
+  ): Promise<HookResponse | null> {
+    const handler = this.plugins.get(pluginId)?.requests.get(normalizeHookPath(path));
+    if (!handler) return null;
+    try {
+      return (await handler(request)) ?? {};
+    } catch (error) {
+      const message = (error as Error).message;
+      console.warn(`[${pluginId}] webhook ${path} failed:`, message);
+      return { status: 500, body: { error: message } };
+    }
   }
 
   /** Every loaded plugin's current page, in load order. */
@@ -248,6 +364,12 @@ export class PluginHost extends EventEmitter {
     entry.timers.length = 0;
     entry.actions.clear();
     entry.files.clear();
+    entry.requests.clear();
+    // Nobody is left to hear the answer, so take the plugin's prompts down.
+    const id = entry.plugin.manifest.id;
+    for (const [promptId, pending] of [...this.prompts]) {
+      if (pending.prompt.plugin === id) this.settlePrompt(promptId, null);
+    }
   }
 
   /** Tear down every plugin, clearing its timers first so none fire mid-exit. */

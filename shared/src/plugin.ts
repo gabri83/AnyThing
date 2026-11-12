@@ -10,6 +10,7 @@
  */
 
 import type { ControlBindings } from './controls';
+import type { PromptSpec } from './protocol';
 import type { Tile } from './tiles';
 
 export interface PluginManifest {
@@ -83,7 +84,55 @@ export interface PluginApi {
 
   /** Show a transient message on connected devices. */
   notify(level: 'info' | 'warn' | 'error', message: string): void;
+
+  /**
+   * Ask the user something that takes over the device screen until answered.
+   * Resolves with the id of the chosen choice, or null if nobody answered
+   * within `timeoutMs`, the prompt was dismissed, or the plugin was torn down.
+   */
+  prompt(spec: PromptSpec, options?: PromptOptions): Promise<string | null>;
+
+  /** Withdraw a prompt early, e.g. because it was answered somewhere else. */
+  dismissPrompt(id: string): void;
+
+  /**
+   * Receive HTTP requests at `/hooks/<plugin id>/<path>` — a webhook for other
+   * programs on this Mac to push events to your plugin. Only requests from the
+   * Mac itself are accepted; the device and the network cannot reach it.
+   * The handler may take its time: the response is sent when it resolves.
+   */
+  onRequest(path: string, handler: RequestHandler): void;
+
+  /** Bring this plugin's page to the front on connected devices. */
+  focus(): void;
 }
+
+export interface PromptOptions {
+  /** Your own id for the prompt, for `dismissPrompt`. Generated when omitted. */
+  id?: string;
+  /** Give up and resolve null after this long. Default: wait indefinitely. */
+  timeoutMs?: number;
+}
+
+/** What a webhook handler receives. */
+export interface HookRequest {
+  method: string;
+  /** Query string parameters. */
+  query: Record<string, string>;
+  /** Parsed JSON body, or undefined when there was none. */
+  body: unknown;
+}
+
+/** What a webhook handler returns. Return nothing for an empty 200. */
+export interface HookResponse {
+  status?: number;
+  /** Sent as JSON. */
+  body?: unknown;
+}
+
+export type RequestHandler = (
+  request: HookRequest
+) => HookResponse | void | Promise<HookResponse | void>;
 
 export type ActionHandler = (payload: unknown) => void | Promise<void>;
 

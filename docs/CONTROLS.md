@@ -25,7 +25,7 @@ the end. Turn the dial, press every button, and watch what arrives:
 
 ```
 KEY     ArrowRight   code:ArrowRight    rotate-cw → dial-volume
-WHEEL   deltaY +40                      rotate-cw → dial-volume
+WHEEL   deltaX +120                     rotate-cw → dial-volume
 KEY     q            code:KeyQ          unmapped
 ```
 

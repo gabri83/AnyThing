@@ -33,7 +33,16 @@ export interface InvokeMessage {
   payload?: unknown;
 }
 
-export type ClientMessage = HelloMessage | InvokeMessage;
+/** The user's answer to a prompt the host is showing. */
+export interface AnswerMessage {
+  t: 'answer';
+  /** Id of the prompt being answered. */
+  prompt: string;
+  /** Id of the chosen choice. */
+  choice: string;
+}
+
+export type ClientMessage = HelloMessage | InvokeMessage | AnswerMessage;
 
 // ---------------------------------------------------------------------------
 // Server -> client
@@ -95,6 +104,42 @@ export interface NoticeMessage {
   message: string;
 }
 
+/** One answer the user can give to a prompt. */
+export interface PromptChoice {
+  id: string;
+  label: string;
+  /**
+   * `primary` is what pressing the dial chooses, `secondary` what the back
+   * button chooses. At most one of each; other choices are touch only.
+   */
+  role?: 'primary' | 'secondary';
+}
+
+/**
+ * A question that takes over the screen until it is answered, whatever page
+ * is showing: "allow this command?", "timer finished", "incoming call".
+ */
+export interface PromptSpec {
+  /** Small line above the title saying who is asking, e.g. the project name. */
+  source?: string;
+  title: string;
+  /** Longer detail, shown monospaced and scrollable with the dial. */
+  body?: string;
+  choices: PromptChoice[];
+}
+
+/** The full set of prompts awaiting an answer, oldest first. Sent on every change. */
+export interface PromptsMessage {
+  t: 'prompts';
+  prompts: Array<PromptSpec & { id: string; plugin: string }>;
+}
+
+/** A plugin asked for its page to be brought to the front. */
+export interface FocusMessage {
+  t: 'focus';
+  plugin: string;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | DeniedMessage
@@ -102,7 +147,9 @@ export type ServerMessage =
   | TilesMessage
   | ControlsMessage
   | InputMessage
-  | NoticeMessage;
+  | NoticeMessage
+  | PromptsMessage
+  | FocusMessage;
 
 export type AnyMessage = ClientMessage | ServerMessage;
 
@@ -147,6 +194,12 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     };
   }
 
+  if (value.t === 'answer') {
+    if (typeof value.prompt !== 'string') return null;
+    if (typeof value.choice !== 'string') return null;
+    return { t: 'answer', prompt: value.prompt, choice: value.choice };
+  }
+
   return null;
 }
 
@@ -168,6 +221,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     case 'controls':
     case 'input':
     case 'notice':
+    case 'prompts':
+    case 'focus':
       return value as unknown as ServerMessage;
     default:
       return null;

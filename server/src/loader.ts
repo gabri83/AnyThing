@@ -1,15 +1,18 @@
 import { existsSync } from 'fs';
 import { readdir } from 'fs/promises';
-import { join } from 'path';
+import { dirname, join, sep } from 'path';
 import type { Plugin } from '@anything/shared';
 import type { PluginHost } from './host';
 
 import appleMusic from './plugins/apple-music';
+import calendar from './plugins/calendar';
+import claudeCode from './plugins/claude-code';
 import macros from './plugins/macros';
 import sysmon from './plugins/sysmon';
+import todo from './plugins/todo';
 
 /** Plugins that ship with the host. */
-export const builtinPlugins: Plugin[] = [appleMusic, macros, sysmon];
+export const builtinPlugins: Plugin[] = [appleMusic, macros, todo, calendar, claudeCode, sysmon];
 
 function looksLikePlugin(value: unknown): value is Plugin {
   if (typeof value !== 'object' || value === null) return false;
@@ -28,6 +31,12 @@ function looksLikePlugin(value: unknown): value is Plugin {
  * `module.exports =`, since plugin authors write plain CommonJS.
  */
 export function loadPluginModule(entryPath: string): Plugin {
+  // Forget the plugin's files first, so a reload after an update or an edit
+  // runs the code that is on disk now rather than what was loaded at start-up.
+  const folder = dirname(entryPath) + sep;
+  for (const cached of Object.keys(require.cache)) {
+    if (cached.startsWith(folder)) delete require.cache[cached];
+  }
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const module = require(entryPath);
   const candidate = module?.default ?? module;

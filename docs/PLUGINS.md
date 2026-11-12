@@ -34,6 +34,34 @@ Plain CommonJS, no build step. A plugin whose `setup` throws is rolled back and
 skipped with a logged reason — it cannot stop the host or other plugins from
 starting.
 
+## Sharing and installing
+
+A plugin is shared as a git repository with `index.js` at its top level.
+
+```bash
+anything plugin add owner/repo          # GitHub; add #tag or #branch for a version
+anything plugin add https://gitlab.com/group/repo.git
+anything plugin add ./a-folder
+anything plugin update <name>           # fetch it again from where it came from
+anything plugin remove <name>
+anything plugin list
+```
+
+What the installer does, and does not do:
+
+- It fetches into a hidden folder and moves the result into
+  `~/.anything/plugins/<name>` only once it is complete, so a failed install
+  leaves nothing behind. `<name>` is the repository name without an
+  `anything-plugin-` or `anything-` prefix.
+- If there is a `package.json` with `dependencies` and no `node_modules`, it
+  runs `npm install --omit=dev --ignore-scripts`. Dependencies that need an
+  install script to build will not work; bundle your plugin instead.
+- It never runs the plugin. The host does, when it loads it — with the full
+  access of the user running the host. There is no sandbox and no review, which
+  is why `plugin add` asks first (`--yes` answers for scripts).
+- A running host is asked to reload, and re-reads plugin code from disk when it
+  does, so installs, updates and your own edits apply without a restart.
+
 If you write TypeScript, `import { definePlugin } from '@anything/shared'` gives
 you the types; the bundled plugins under `server/src/plugins/` are the reference.
 
@@ -50,6 +78,10 @@ you the types; the bundled plugins under `server/src/plugins/` are the reference
 | `api.serveFile(name, path)` | Serve a local file to the device; returns its URL |
 | `api.log`, `api.warn` | Namespaced logging — prefer these over `console` |
 | `api.notify(level, msg)` | Show a transient message on connected devices |
+| `api.prompt(spec, options)` | Ask a question that takes over the screen; resolves with the answer ([below](#prompts)) |
+| `api.dismissPrompt(id)` | Withdraw a prompt early |
+| `api.onRequest(path, handler)` | Receive HTTP requests from other programs on this Mac ([below](#webhooks)) |
+| `api.focus()` | Bring your page to the front on connected devices |
 
 Three behaviours worth knowing:
 
@@ -124,6 +156,76 @@ Omit an action to hide its control. The `seek` action is invoked with
 `{ position: <seconds> }`. The UI advances the progress bar locally between your
 updates and snaps to whatever you report, so a poll every second or two is
 plenty.
+
+### list
+
+A scrolling list of rows — sessions, to-dos, calendar events.
+
+```js
+{ kind: 'list', id: 'todo', w: 6, h: 2,
+  label: 'Today',                      // optional heading
+  items: [
+    { id: 'a', title: 'Ship the release', subtitle: 'before 5pm',
+      badge: 'due', badgeColor: 'red', icon: '📦' },
+    { id: 'b', title: 'Book flights', done: true }
+  ],
+  selected: 'a',                       // highlighted row, kept in view
+  action: 'open',                      // invoked with { id } on tap
+  emptyHint: 'Nothing left to do' }
+```
+
+Touch scrolls it. For the dial, bind `rotate` and move `selected` yourself:
+
+```js
+api.setControls({ rotate: 'move' });
+api.onAction('move', ({ delta }) => { /* change selected, then setTiles */ });
+```
+
+The selected row shows its subtitle in full (up to three lines, newlines kept);
+the others show one line.
+
+## Prompts
+
+A prompt covers the whole screen, whatever page is showing, until it is
+answered: "allow this command?", "timer finished", "incoming call".
+
+```js
+const choice = await api.prompt(
+  { source: 'Kitchen timer',           // small line saying who is asking
+    title: 'Pasta is done',
+    body: 'Started 11 minutes ago',    // optional; monospaced, dial scrolls it
+    choices: [
+      { id: 'snooze', label: '+1 min', role: 'secondary' },  // back button
+      { id: 'ok', label: 'Done', role: 'primary' }           // dial press
+    ] },
+  { id: 'pasta', timeoutMs: 60000 }    // both optional
+);
+// 'ok', 'snooze', or null if nobody answered, it timed out, or you dismissed it
+```
+
+Every choice is a touch target; `primary` and `secondary` additionally answer
+to the dial press and the back button. Lines of `body` starting with `+ ` or
+`- ` are coloured as a diff. Prompts queue: the oldest is shown first. A prompt
+is taken down when your plugin unloads, and re-asking under the same `id`
+replaces the earlier one.
+
+## Webhooks
+
+Other programs on the Mac can push events to your plugin over HTTP:
+
+```js
+api.onRequest('event', async ({ method, query, body }) => {
+  // body is the parsed JSON, if any
+  return { status: 200, body: { ok: true } };   // or return nothing for an empty 200
+});
+```
+
+That handler answers `http://127.0.0.1:3000/hooks/<your plugin id>/event`. The
+response is sent when the handler resolves, so it can wait for the user — a
+handler may `await api.prompt(...)` and return the answer to the caller.
+
+Only requests from the Mac itself are accepted. A device, tethered or on the
+network, cannot reach a webhook.
 
 ## Serving files
 

@@ -116,7 +116,7 @@ describe('Transport', () => {
       token: TOKEN
     });
 
-    expect(frames.map((frame) => frame.t)).toEqual(['welcome', 'pages']);
+    expect(frames.map((frame) => frame.t)).toEqual(['welcome', 'pages', 'prompts']);
     const pages = frames[1];
     if (pages.t !== 'pages') throw new Error('expected pages');
     expect(pages.pages).toHaveLength(1);
@@ -188,7 +188,7 @@ describe('Transport', () => {
       { t: 'nonsense', whatever: true }
     );
 
-    expect(frames.map((frame) => frame.t)).toEqual(['welcome', 'pages']);
+    expect(frames.map((frame) => frame.t)).toEqual(['welcome', 'pages', 'prompts']);
   });
 });
 
@@ -271,7 +271,7 @@ describe('Transport with auth disabled', () => {
         protocol: PROTOCOL_VERSION,
         client: 'test'
       });
-      expect(frames.map((frame) => frame.t)).toEqual(['welcome', 'pages']);
+      expect(frames.map((frame) => frame.t)).toEqual(['welcome', 'pages', 'prompts']);
     } finally {
       await transport.stop();
       await host.teardown();

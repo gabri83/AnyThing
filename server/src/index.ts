@@ -4,12 +4,19 @@ import { Runtime, defaultUiDir } from './runtime';
 const { version } = require('../package.json') as { version: string };
 
 async function main(): Promise<void> {
-  const runtime = await Runtime.start({ version, uiDir: defaultUiDir() });
+  const runtime = await Runtime.start({
+    version,
+    uiDir: defaultUiDir(),
+    connectDevices: true
+  });
   const config = runtime.currentConfig();
 
   console.log('');
   console.log(`  AnyThing host v${version} ready`);
-  console.log(`  Open on your device:  ${runtime.deviceUrl()}`);
+  if (config.device.carThing.enabled) {
+    console.log('  Car Thing:            plug it in and AnyThing appears on its screen');
+  }
+  console.log(`  Any other browser:    ${runtime.deviceUrl()}`);
   console.log(
     `  Settings on this Mac: http://localhost:${config.server.port}/#settings`
   );

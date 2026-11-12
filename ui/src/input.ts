@@ -29,6 +29,11 @@ export interface DeviceInputOptions {
   onRaw?: (event: RawInputEvent) => void;
   /** When true, events are reported but never invoked. */
   inspectOnly?: boolean;
+  /**
+   * Takes the controls away from the page while something else owns the
+   * screen (a prompt). Called for every gesture; return true to consume it.
+   */
+  capture?: (gesture: InputGesture) => boolean;
 }
 
 /**
@@ -44,12 +49,13 @@ export function useDeviceInput({
   bindings,
   invoke,
   onRaw,
-  inspectOnly = false
+  inspectOnly = false,
+  capture
 }: DeviceInputOptions): void {
   // Held in refs so the window listeners are attached once and always read
   // current values, rather than being torn down on every tile update.
-  const stateRef = useRef({ input, bindings, invoke, onRaw, inspectOnly });
-  stateRef.current = { input, bindings, invoke, onRaw, inspectOnly };
+  const stateRef = useRef({ input, bindings, invoke, onRaw, inspectOnly, capture });
+  stateRef.current = { input, bindings, invoke, onRaw, inspectOnly, capture };
 
   const pendingRef = useRef(0);
   const flushTimerRef = useRef<number | null>(null);
@@ -75,7 +81,14 @@ export function useDeviceInput({
     /** Record a gesture, returning the action it would invoke. */
     const dispatch = (gesture: InputGesture | null): string | undefined => {
       if (!gesture) return undefined;
-      const { bindings: current, invoke: send, inspectOnly: quiet } = stateRef.current;
+      const {
+        bindings: current,
+        invoke: send,
+        inspectOnly: quiet,
+        capture: take
+      } = stateRef.current;
+
+      if (take && !quiet && take(gesture)) return undefined;
 
       if (gesture === 'rotate-cw' || gesture === 'rotate-ccw') {
         pendingRef.current += gesture === 'rotate-cw' ? 1 : -1;
@@ -120,15 +133,18 @@ export function useDeviceInput({
 
     const onWheel = (event: WheelEvent) => {
       const { input: config, onRaw: report } = stateRef.current;
-      if (!config?.wheel || event.deltaY === 0) return;
+      // The Car Thing's dial arrives as a horizontal wheel (deltaX), a mouse
+      // as a vertical one; either counts.
+      const delta = event.deltaY || event.deltaX;
+      if (!config?.wheel || delta === 0) return;
 
-      const direction = Math.sign(event.deltaY) * (config.wheelInvert ? -1 : 1);
+      const direction = Math.sign(delta) * (config.wheelInvert ? -1 : 1);
       const gesture: InputGesture = direction > 0 ? 'rotate-cw' : 'rotate-ccw';
 
       const action = dispatch(gesture);
       report?.({
         source: 'wheel',
-        detail: `deltaY ${event.deltaY > 0 ? '+' : ''}${Math.round(event.deltaY)}`,
+        detail: `${event.deltaY ? 'deltaY' : 'deltaX'} ${delta > 0 ? '+' : ''}${Math.round(delta)}`,
         gesture,
         action,
         at: Date.now()

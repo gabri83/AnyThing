@@ -12,9 +12,10 @@ async function scratchFile(name = 'config.json'): Promise<string> {
 describe('normalizeConfig', () => {
   it('fills in defaults for an empty object', () => {
     expect(normalizeConfig({})).toEqual({
-      server: { host: '0.0.0.0', port: 3000 },
+      server: { host: '127.0.0.1', port: 3000 },
       auth: { enabled: true, token: '', allowRemoteConfig: false },
       input: DEFAULT_INPUT_CONFIG,
+      device: { carThing: { enabled: true, address: '10.42.1.82' } },
       plugins: {}
     });
   });

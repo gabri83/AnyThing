@@ -36,14 +36,27 @@ export interface AnythingConfig {
    * mapping lives in one place rather than being baked into the UI.
    */
   input: InputConfig;
+  /** Hardware the host connects to by itself. */
+  device: {
+    carThing: {
+      /** Put the UI on a Car Thing whenever one is plugged into this Mac. */
+      enabled: boolean;
+      /** The device's address on the USB network link. */
+      address: string;
+    };
+  };
   /** Per-plugin config. `enabled: false` skips the plugin at load time. */
   plugins: Record<string, Record<string, unknown> & { enabled?: boolean }>;
 }
 
 export const DEFAULT_CONFIG: AnythingConfig = {
-  server: { host: '0.0.0.0', port: 3000 },
+  // Loopback: a tethered Car Thing comes in through the connector's tunnel, so
+  // nothing needs to listen on the network. Set '0.0.0.0' to use a phone or
+  // tablet as a second screen.
+  server: { host: '127.0.0.1', port: 3000 },
   auth: { enabled: true, token: '', allowRemoteConfig: false },
   input: DEFAULT_INPUT_CONFIG,
+  device: { carThing: { enabled: true, address: '10.42.1.82' } },
   plugins: {}
 };
 
@@ -106,6 +119,8 @@ export function normalizeConfig(raw: unknown): AnythingConfig {
   const source = isRecord(raw) ? raw : {};
   const server = isRecord(source.server) ? source.server : {};
   const auth = isRecord(source.auth) ? source.auth : {};
+  const device = isRecord(source.device) ? source.device : {};
+  const carThing = isRecord(device.carThing) ? device.carThing : {};
 
   // Port 0 is kept as-is and means "any free port", the usual convention. The
   // real port is then only knowable after binding, which is why the printed
@@ -126,6 +141,18 @@ export function normalizeConfig(raw: unknown): AnythingConfig {
         typeof auth.allowRemoteConfig === 'boolean' ? auth.allowRemoteConfig : false
     },
     input: normalizeInput(source.input),
+    device: {
+      carThing: {
+        enabled:
+          typeof carThing.enabled === 'boolean'
+            ? carThing.enabled
+            : DEFAULT_CONFIG.device.carThing.enabled,
+        address:
+          typeof carThing.address === 'string' && carThing.address
+            ? carThing.address
+            : DEFAULT_CONFIG.device.carThing.address
+      }
+    },
     plugins: isRecord(source.plugins) ? (source.plugins as AnythingConfig['plugins']) : {}
   };
 }
