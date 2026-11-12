@@ -1,6 +1,6 @@
 import { existsSync } from 'fs';
 import { readdir } from 'fs/promises';
-import { join } from 'path';
+import { dirname, join, sep } from 'path';
 import type { Plugin } from '@anything/shared';
 import type { PluginHost } from './host';
 
@@ -31,6 +31,12 @@ function looksLikePlugin(value: unknown): value is Plugin {
  * `module.exports =`, since plugin authors write plain CommonJS.
  */
 export function loadPluginModule(entryPath: string): Plugin {
+  // Forget the plugin's files first, so a reload after an update or an edit
+  // runs the code that is on disk now rather than what was loaded at start-up.
+  const folder = dirname(entryPath) + sep;
+  for (const cached of Object.keys(require.cache)) {
+    if (cached.startsWith(folder)) delete require.cache[cached];
+  }
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const module = require(entryPath);
   const candidate = module?.default ?? module;

@@ -13,6 +13,14 @@ import {
   installOnDevice,
   uninstallFromDevice
 } from './device/install';
+import { createInterface } from 'readline';
+import {
+  installPlugin,
+  listInstalled,
+  parseSource,
+  removePlugin,
+  updatePlugin
+} from './installer';
 import { inventory, type PluginSummary } from './inventory';
 
 const USAGE = `AnyThing host CLI
@@ -23,6 +31,12 @@ const USAGE = `AnyThing host CLI
   anything enable <plugin>     enable a plugin
   anything disable <plugin>    disable a plugin
   anything rotate-token        issue a new token (devices must reload)
+
+  anything plugin add <source> install a plugin: owner/repo on GitHub (add #tag for a
+                               version), a git URL, or a folder. --yes skips the question
+  anything plugin update <name>  fetch an installed plugin again
+  anything plugin remove <name>  delete an installed plugin
+  anything plugin list         installed plugins and where they came from
   anything config              print the config file path
 
   anything todo "Buy milk"     add an item to the to-do page (the host must be running)
@@ -67,6 +81,140 @@ async function setEnabled(id: string, enabled: boolean): Promise<void> {
   console.log(`${id} ${enabled ? 'enabled' : 'disabled'}. Restart the host to apply.`);
 }
 
+function confirm(question: string): Promise<boolean> {
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((done) => {
+    prompt.question(question, (answer) => {
+      prompt.close();
+      done(/^y(es)?$/i.test(answer.trim()));
+    });
+  });
+}
+
+/**
+ * Ask a running host to load its plugins again, and say what changed. The
+ * host is optional: with none running the plugin is simply there next start.
+ */
+async function reloadHost(port: number, before: string[] | null): Promise<void> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/plugins/reload`, { method: 'POST' });
+    if (!response.ok) throw new Error(`the host answered ${response.status}`);
+    const { loaded } = (await response.json()) as { loaded: string[] };
+    if (before) {
+      const added = loaded.filter((id) => !before.includes(id));
+      const gone = before.filter((id) => !loaded.includes(id));
+      if (added.length > 0) console.log(`Now on the device: ${added.join(', ')}`);
+      if (gone.length > 0) console.log(`No longer loaded: ${gone.join(', ')}`);
+      if (added.length === 0 && gone.length === 0) console.log('The host reloaded its plugins.');
+    } else {
+      console.log('The host reloaded its plugins.');
+    }
+    const listing = (await (await fetch(`http://127.0.0.1:${port}/api/plugins`)).json()) as {
+      plugins: PluginSummary[];
+    };
+    for (const plugin of listing.plugins) {
+      if (plugin.origin === 'user' && plugin.note) console.log(`  ${plugin.id}: ${plugin.note}`);
+    }
+  } catch {
+    console.log('The host is not running; it will pick this up when it starts.');
+  }
+}
+
+async function loadedIds(port: number): Promise<string[] | null> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/status`);
+    const status = (await response.json()) as { plugins?: unknown };
+    return Array.isArray(status.plugins)
+      ? status.plugins.filter((id): id is string => typeof id === 'string')
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function pluginCommand(argv: string[]): Promise<number> {
+  const flags = argv.filter((entry) => entry.startsWith('--'));
+  const [action, target] = argv.filter((entry) => !entry.startsWith('--'));
+  const dir = userPluginDir();
+  const { port } = (await loadConfig()).server;
+
+  switch (action) {
+    case undefined:
+    case 'list': {
+      const installed = await listInstalled(dir);
+      if (installed.length === 0) {
+        console.log(`No plugins installed in ${dir}`);
+        console.log('Install one with: anything plugin add <owner>/<repo>');
+        return 0;
+      }
+      for (const plugin of installed) {
+        const origin = plugin.source
+          ? `${plugin.source}${plugin.ref ? `#${plugin.ref}` : ''}${plugin.commit ? ` @ ${plugin.commit.slice(0, 7)}` : ''}`
+          : 'added by hand';
+        console.log(`${plugin.name.padEnd(18)} ${origin}`);
+      }
+      return 0;
+    }
+
+    case 'add':
+    case 'install': {
+      if (!target) {
+        console.error('Usage: anything plugin add <owner>/<repo> | <git URL> | <folder>');
+        return 1;
+      }
+      const source = parseSource(target);
+      if (!flags.includes('--yes')) {
+        console.log(`Install "${source.name}" from ${source.display}?`);
+        console.log('A plugin is a program: it runs on this Mac with the same access you have.');
+        console.log('Only install one you trust, or have read.');
+        if (!process.stdin.isTTY) {
+          console.error('Not installed: run this in a terminal, or pass --yes.');
+          return 1;
+        }
+        if (!(await confirm('Install it? [y/N] '))) {
+          console.log('Not installed.');
+          return 1;
+        }
+      }
+      const before = await loadedIds(port);
+      const installed = await installPlugin(source, dir);
+      console.log(`Installed ${installed.name} in ${dir}/${installed.name}`);
+      await reloadHost(port, before);
+      return 0;
+    }
+
+    case 'update': {
+      if (!target) {
+        console.error('Usage: anything plugin update <name>');
+        return 1;
+      }
+      const updated = await updatePlugin(target, dir);
+      console.log(
+        `Updated ${updated.name}${updated.commit ? ` to ${updated.commit.slice(0, 7)}` : ''}`
+      );
+      await reloadHost(port, null);
+      return 0;
+    }
+
+    case 'remove':
+    case 'uninstall': {
+      if (!target) {
+        console.error('Usage: anything plugin remove <name>');
+        return 1;
+      }
+      const before = await loadedIds(port);
+      await removePlugin(target, dir);
+      console.log(`Removed ${target}`);
+      await reloadHost(port, before);
+      return 0;
+    }
+
+    default:
+      console.error('Usage: anything plugin [list|add <source>|update <name>|remove <name>]');
+      return 1;
+  }
+}
+
 async function main(argv: string[]): Promise<number> {
   const [command, argument] = argv;
 
@@ -109,6 +257,9 @@ async function main(argv: string[]): Promise<number> {
       }
       return 0;
     }
+
+    case 'plugin':
+      return pluginCommand(argv.slice(1));
 
     case 'enable':
     case 'disable': {

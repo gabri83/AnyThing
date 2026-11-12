@@ -198,6 +198,26 @@ module.exports = {
 Drop it in `~/.anything/plugins/coffee/index.js` and restart. A working example
 with every tile kind is in [`examples/hello-world`](examples/hello-world).
 
+### Installing someone else's
+
+```bash
+node server/dist/cli.js plugin add someone/anything-plugin-weather   # a GitHub repository
+node server/dist/cli.js plugin add someone/anything-plugin-weather#v1.2
+node server/dist/cli.js plugin add ./examples/hello-world            # or a folder
+node server/dist/cli.js plugin list
+node server/dist/cli.js plugin update weather
+node server/dist/cli.js plugin remove weather
+```
+
+A running host loads the plugin straight away; its page appears on the device
+without a restart. **A plugin is a program with the same access to your Mac as
+you have** — there is no sandbox — so the command asks before installing. Read
+what you install, or trust who wrote it.
+
+To publish one, put a folder with `index.js` at its top level in a public
+repository. Naming it `anything-plugin-<name>` is a convention, not a rule; the
+prefix is dropped from the installed folder name.
+
 The full API — all six tile kinds, the grid, actions, polling, full-screen
 prompts, webhooks, serving files — is in [docs/PLUGINS.md](docs/PLUGINS.md), and
 the dial and buttons are in [docs/CONTROLS.md](docs/CONTROLS.md).

@@ -34,6 +34,34 @@ Plain CommonJS, no build step. A plugin whose `setup` throws is rolled back and
 skipped with a logged reason — it cannot stop the host or other plugins from
 starting.
 
+## Sharing and installing
+
+A plugin is shared as a git repository with `index.js` at its top level.
+
+```bash
+anything plugin add owner/repo          # GitHub; add #tag or #branch for a version
+anything plugin add https://gitlab.com/group/repo.git
+anything plugin add ./a-folder
+anything plugin update <name>           # fetch it again from where it came from
+anything plugin remove <name>
+anything plugin list
+```
+
+What the installer does, and does not do:
+
+- It fetches into a hidden folder and moves the result into
+  `~/.anything/plugins/<name>` only once it is complete, so a failed install
+  leaves nothing behind. `<name>` is the repository name without an
+  `anything-plugin-` or `anything-` prefix.
+- If there is a `package.json` with `dependencies` and no `node_modules`, it
+  runs `npm install --omit=dev --ignore-scripts`. Dependencies that need an
+  install script to build will not work; bundle your plugin instead.
+- It never runs the plugin. The host does, when it loads it — with the full
+  access of the user running the host. There is no sandbox and no review, which
+  is why `plugin add` asks first (`--yes` answers for scripts).
+- A running host is asked to reload, and re-reads plugin code from disk when it
+  does, so installs, updates and your own edits apply without a restart.
+
 If you write TypeScript, `import { definePlugin } from '@anything/shared'` gives
 you the types; the bundled plugins under `server/src/plugins/` are the reference.
 
