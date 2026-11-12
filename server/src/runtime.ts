@@ -10,6 +10,7 @@ import {
   userPluginDir,
   type AnythingConfig
 } from './config';
+import { CarThingConnector } from './device/carthing';
 import { PluginHost } from './host';
 import { inventory, type PluginSummary } from './inventory';
 import { loadAll } from './loader';
@@ -21,6 +22,8 @@ export interface RuntimeOptions {
   uiDir?: string;
   configFile?: string;
   pluginDir?: string;
+  /** Connect to a Car Thing when the config asks for it. Off in tests. */
+  connectDevices?: boolean;
 }
 
 /** First non-loopback IPv4 address, for the URL to open on the device. */
@@ -48,6 +51,7 @@ export class Runtime {
   private readonly host: PluginHost;
   private readonly transport: Transport;
   private readonly options: RuntimeOptions;
+  private carThing: CarThingConnector | null = null;
 
   private constructor(config: AnythingConfig, options: RuntimeOptions) {
     this.config = config;
@@ -77,6 +81,14 @@ export class Runtime {
     await loadAll(runtime.host, runtime.pluginDir);
     await runtime.transport.start();
 
+    if (options.connectDevices && config.device.carThing.enabled) {
+      runtime.carThing = new CarThingConnector({
+        address: config.device.carThing.address,
+        hostPort: runtime.transport.devicePort()
+      });
+      runtime.carThing.start();
+    }
+
     return runtime;
   }
 
@@ -89,7 +101,10 @@ export class Runtime {
   }
 
   public deviceUrl(): string {
-    const address = lanAddress() ?? this.config.server.host;
+    // A loopback-only host is not reachable at the LAN address, so do not
+    // print a URL that cannot work.
+    const loopbackOnly = ['127.0.0.1', 'localhost', '::1'].includes(this.config.server.host);
+    const address = loopbackOnly ? 'localhost' : (lanAddress() ?? this.config.server.host);
     // Ask the listener: a configured port of 0 means the real one is assigned
     // at bind time, and the URL has to carry the port that actually works.
     const port = this.transport.port() || this.config.server.port;
@@ -168,11 +183,18 @@ export class Runtime {
         await this.host.invoke(plugin, action);
       },
       deviceUrl: () => this.deviceUrl(),
-      paths: { config: this.configFile, plugins: this.pluginDir }
+      paths: { config: this.configFile, plugins: this.pluginDir },
+      isDeviceRequest: (request) => this.transport.isDeviceRequest(request)
     };
   }
 
+  /** The Car Thing connector, when one is running. */
+  public device(): CarThingConnector | null {
+    return this.carThing;
+  }
+
   public async stop(): Promise<void> {
+    await this.carThing?.stop();
     await this.transport.stop();
     await this.host.teardown();
   }

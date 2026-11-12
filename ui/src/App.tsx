@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { InputGesture } from '@anything/shared';
 import { useConnection } from './connection';
 import { useDeviceInput, type RawInputEvent } from './input';
 import { InputInspector } from './InputInspector';
+import { PromptView } from './PromptView';
 import { SettingsView } from './settings/SettingsView';
 import { TileView } from './tiles/TileView';
 
@@ -27,7 +29,8 @@ function useHashFlag(flag: string): [boolean, () => void] {
 }
 
 export function App() {
-  const { status, deniedReason, pages, notice, input, invoke } = useConnection();
+  const { status, deniedReason, pages, notice, input, prompts, focus, invoke, answer } =
+    useConnection();
   const [activePlugin, setActivePlugin] = useState<string | null>(null);
   const [inspecting, closeInspector] = useHashFlag('input');
   const [settingsOpen, closeSettings] = useHashFlag('settings');
@@ -47,7 +50,36 @@ export function App() {
     );
   }, [pages]);
 
+  // A plugin can ask for its page to be shown, e.g. when something needs you.
+  useEffect(() => {
+    if (focus && pages.some((page) => page.plugin === focus.plugin)) {
+      setActivePlugin(focus.plugin);
+    }
+    // Only a new request should switch pages, not every tile update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+
   const active = pages.find((page) => page.plugin === activePlugin) ?? null;
+
+  // The oldest unanswered prompt owns the screen and the controls.
+  const prompt = prompts.length > 0 ? prompts[0] : null;
+  const promptBodyRef = useRef<HTMLDivElement | null>(null);
+  const capturePrompt = useCallback(
+    (gesture: InputGesture): boolean => {
+      if (!prompt) return false;
+      if (gesture === 'rotate-cw' || gesture === 'rotate-ccw') {
+        const body = promptBodyRef.current;
+        if (body) body.scrollTop += gesture === 'rotate-cw' ? 56 : -56;
+        return true;
+      }
+      const role = gesture === 'press' ? 'primary' : gesture === 'back' ? 'secondary' : null;
+      const choice = role && prompt.choices.find((candidate) => candidate.role === role);
+      if (choice) answer(prompt.id, choice.id);
+      // Presets are swallowed too: nothing behind a prompt should fire.
+      return true;
+    },
+    [prompt, answer]
+  );
 
   const recordEvent = useCallback((event: RawInputEvent) => {
     setEvents((current) => [event, ...current].slice(0, EVENT_LOG_LIMIT));
@@ -61,6 +93,7 @@ export function App() {
     invoke: (action, payload) => {
       if (active) invoke(active.plugin, action, payload);
     },
+    capture: prompt ? capturePrompt : undefined,
     onRaw: inspecting ? recordEvent : undefined,
     // While inspecting, report events without firing actions: you should be
     // able to find out what a button does without it muting your mic.
@@ -155,6 +188,16 @@ export function App() {
         <div className="toast" data-level={notice.level} key={notice.key}>
           {notice.message}
         </div>
+      )}
+
+      {prompt && (
+        <PromptView
+          key={prompt.id}
+          ref={promptBodyRef}
+          prompt={prompt}
+          waiting={prompts.length - 1}
+          answer={(choice) => answer(prompt.id, choice)}
+        />
       )}
     </div>
   );

@@ -4,13 +4,17 @@ Turn a Spotify Car Thing — or any spare screen — into a plugin-driven contro
 for your Mac.
 
 A small server runs on your Mac. Plugins publish **tiles**; the device renders
-them in a grid and sends presses back. Three plugins ship with it:
+them in a grid and sends presses back. Plug a Car Thing into the Mac and
+AnyThing appears on its screen. Six plugins ship with it:
 
 | Plugin | What it does |
 | --- | --- |
 | `apple-music` | Play/pause, skip, seek, album art, volume, shuffle. The dial is volume |
 | `macros` | A Stream Deck: shell commands, AppleScript, Shortcuts, keystrokes |
 | `sysmon` | CPU and memory always; temperature and fans where the Mac allows |
+| `todo` | A to-do list ticked off with the dial. Add items from the Mac: `anything todo "Buy milk"` |
+| `calendar` | What is coming up, from any iCalendar (.ics) feed — iCloud, Google, Outlook |
+| `claude-code` | Every Claude Code session at a glance, and permission requests answered from the dial ([docs](docs/CLAUDE-CODE.md)) |
 
 Everything the bundled plugins do goes through the same public plugin API, so a
 plugin you write has exactly the capabilities they have — including the dial and
@@ -26,16 +30,17 @@ npm run build
 npm start
 ```
 
-The host prints the URL to open, with a token in it:
-
 ```
   AnyThing host v1.0.0 ready
-  Open on your device:  http://192.168.1.24:3000/?token=8f2c...
+  Car Thing:            plug it in and AnyThing appears on its screen
+  Any other browser:    http://localhost:3000/?token=8f2c...
 ```
 
-Open that on anything with a browser — laptop, phone, iPad, or the Car Thing.
-The token moves into the browser's local storage on first load, so later visits
-work without the query string.
+With a Car Thing running the Bridgething image, that is all: plug it in. To try
+it without the hardware, open the printed URL in a browser on the Mac. The
+token moves into the browser's local storage on first load, so later visits
+work without the query string. To use a phone or tablet as a screen, set
+`server.host` to `0.0.0.0` and open the same URL with the Mac's address.
 
 To set up your macros, open the settings page on the Mac:
 
@@ -56,33 +61,28 @@ nothing until you grant them.
 
 ## The device
 
-The Car Thing is an Amlogic S905D3 board running Linux with an 800×480
-touchscreen. It is not driven over USB: you flash it once with community
-tooling, after which it runs a Chromium kiosk you point at your Mac. AnyThing is
-just a web page to it, which is why you can use all of this today from a laptop
-and sort the hardware out later.
+The Car Thing is an Amlogic S905D2 board running Linux with an 800×480
+touchscreen, a dial, five buttons and Bluetooth — and no Wi-Fi. It is not a USB
+display: flashed with a community image it runs a Chromium kiosk, and AnyThing
+is just a web page to it.
 
-With the device plugged in:
+On the **Bridgething** image the host does everything: it notices the device on
+USB, tunnels to it over ssh, and points its kiosk at the UI. Nothing is
+installed on the device, the host never listens on the network, and unplugging
+puts the device back as it was. [docs/DEVICE.md](docs/DEVICE.md) has the detail,
+the measured control mapping, and the manual path for Nocturne.
 
-```bash
-npm run find-device
-```
-
-That finds it over USB networking, works out which address it must call back
-on, and prints the steps to repoint its kiosk. It only looks; it changes
-nothing. [docs/DEVICE.md](docs/DEVICE.md) has the detail, including the
-Nocturne path.
-
-**The device's browser is Chromium 69 era.** That is not a detail — optional
-chaining alone would turn the screen blank. The UI builds for `chrome69` and
+**Older images run a Chromium 69 era browser.** Optional chaining alone would
+turn that screen blank, so the UI builds for `chrome69` and
 `npm run check:device` fails the build if anything newer creeps in.
 
 ### The dial and buttons
 
-The dial controls whichever page is on screen — volume on the music page. What
-the dial and buttons actually emit depends on the image you flashed, so the
-mapping is configuration rather than a guess in the code. Open `/#input` on the
-device to see exactly what yours sends, then adjust `input.keymap`.
+The dial controls whichever page is on screen — volume on the music page, the
+selected session on the Claude page. What the dial and buttons emit depends on
+the image, so the mapping is configuration rather than a guess in the code. The
+defaults match Bridgething as measured; for anything else open `/#input` on the
+device to see what yours sends, then adjust `input.keymap`.
 [docs/CONTROLS.md](docs/CONTROLS.md) covers it.
 
 ## Settings
@@ -109,11 +109,13 @@ you can also edit by hand. It is created on first run:
 
 ```json
 {
-  "server": { "host": "0.0.0.0", "port": 3000 },
+  "server": { "host": "127.0.0.1", "port": 3000 },
   "auth": { "enabled": true, "token": "generated-on-first-run" },
   "input": { "wheel": true, "wheelInvert": false, "rotateFlushMs": 80 },
+  "device": { "carThing": { "enabled": true, "address": "10.42.1.82" } },
   "plugins": {
     "apple-music": { "pollMs": 1500, "volumeStep": 5 },
+    "calendar": { "feeds": ["https://example.com/my-calendar.ics"], "days": 7 },
     "sysmon": { "pollMs": 2000 },
     "macros": {
       "macros": [
@@ -135,16 +137,18 @@ switches one off. `input` is the dial and button mapping
 
 ### A note on the token
 
-The host listens on `0.0.0.0` so the device can reach it, and the `macros`
-plugin runs shell commands. Anyone who can reach the port and knows the token
-can trigger your macros. So:
+The host listens on loopback by default: a tethered Car Thing comes in through
+the connector's tunnel and needs no token. If you set `server.host` to
+`0.0.0.0` for a phone or tablet, remember that the `macros` plugin runs shell
+commands — anyone who can reach the port and knows the token can trigger them.
+So:
 
 - auth is **on by default** with a random token
 - a bad token is refused before any tile is sent
 - *changing* settings is refused from other machines unless you allow it: the
   token lets you use the controller, not rewrite what its buttons run
 - `anything rotate-token` issues a new one
-- set `server.host` to `127.0.0.1` if you only ever use it on the Mac itself
+- plugin webhooks (`/hooks/...`) only ever answer the Mac itself
 
 Turning auth off (`auth.enabled: false`) leaves shell execution open to your
 whole network. The host says so loudly at startup if you do.
@@ -157,6 +161,13 @@ node server/dist/cli.js status     # config path, port, auth, plugin count
 node server/dist/cli.js plugins    # what is loaded, and why something is not
 node server/dist/cli.js disable macros
 node server/dist/cli.js rotate-token
+```
+
+```bash
+node server/dist/cli.js todo "Buy milk"     # add to the to-do page
+node server/dist/cli.js device              # is a Car Thing attached?
+node server/dist/cli.js device install      # start on AnyThing at power-on
+node server/dist/cli.js device uninstall    # put the firmware's start page back
 ```
 
 `npm link -w @anything/server` puts it on your PATH as `anything`.
@@ -187,15 +198,15 @@ module.exports = {
 Drop it in `~/.anything/plugins/coffee/index.js` and restart. A working example
 with every tile kind is in [`examples/hello-world`](examples/hello-world).
 
-The full API — all five tile kinds, the grid, actions, polling, serving files —
-is in [docs/PLUGINS.md](docs/PLUGINS.md), and the dial and buttons are in
-[docs/CONTROLS.md](docs/CONTROLS.md).
+The full API — all six tile kinds, the grid, actions, polling, full-screen
+prompts, webhooks, serving files — is in [docs/PLUGINS.md](docs/PLUGINS.md), and
+the dial and buttons are in [docs/CONTROLS.md](docs/CONTROLS.md).
 
 ## Layout
 
 ```
 shared/   protocol, tile model, plugin contract (the API plugin authors use)
-server/   plugin host, transport, settings API, config, CLI, bundled plugins
+server/   plugin host, transport, Car Thing connector, settings API, CLI, bundled plugins
 ui/       the device UI, plus the settings page served to the Mac
 examples/ a complete plugin you can copy
 scripts/  device compatibility gate, and the Car Thing finder

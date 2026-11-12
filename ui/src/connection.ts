@@ -4,6 +4,7 @@ import {
   parseServerMessage,
   type InputConfig,
   type Page,
+  type PromptsMessage,
   type Tile
 } from '@anything/shared';
 
@@ -24,7 +25,12 @@ export interface Connection {
   notice: Notice | null;
   /** How to read the device's physical controls. Null until the host says. */
   input: InputConfig | null;
+  /** Questions awaiting an answer, oldest first. The first one owns the screen. */
+  prompts: PromptsMessage['prompts'];
+  /** Set when a plugin asks for its page to be shown; `key` changes per request. */
+  focus: { plugin: string; key: number } | null;
   invoke: (plugin: string, action: string, payload?: unknown) => void;
+  answer: (prompt: string, choice: string) => void;
 }
 
 const TOKEN_KEY = 'anything.token';
@@ -80,6 +86,8 @@ export function useConnection(): Connection {
   const [pages, setPages] = useState<Page[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [input, setInput] = useState<InputConfig | null>(null);
+  const [prompts, setPrompts] = useState<PromptsMessage['prompts']>([]);
+  const [focus, setFocus] = useState<{ plugin: string; key: number } | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const attemptRef = useRef(0);
@@ -155,11 +163,21 @@ export function useConnection(): Connection {
         case 'notice':
           setNotice({ level: message.level, message: message.message, key: Date.now() });
           break;
+
+        case 'prompts':
+          setPrompts(message.prompts);
+          break;
+
+        case 'focus':
+          setFocus({ plugin: message.plugin, key: Date.now() });
+          break;
       }
     };
 
     socket.onclose = () => {
       socketRef.current = null;
+      // A prompt nobody can answer must not sit on a disconnected screen.
+      setPrompts([]);
       if (closedForGoodRef.current) return;
       setStatus('offline');
       const delay = retryDelay(attemptRef.current);
@@ -193,5 +211,11 @@ export function useConnection(): Connection {
     socket.send(JSON.stringify({ t: 'invoke', plugin, action, payload }));
   }, []);
 
-  return { status, deniedReason, pages, notice, input, invoke };
+  const answer = useCallback((prompt: string, choice: string) => {
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ t: 'answer', prompt, choice }));
+  }, []);
+
+  return { status, deniedReason, pages, notice, input, prompts, focus, invoke, answer };
 }

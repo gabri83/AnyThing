@@ -8,6 +8,11 @@ import {
   userPluginDir,
   type AnythingConfig
 } from './config';
+import {
+  deviceInstallStatus,
+  installOnDevice,
+  uninstallFromDevice
+} from './device/install';
 import { inventory, type PluginSummary } from './inventory';
 
 const USAGE = `AnyThing host CLI
@@ -19,6 +24,12 @@ const USAGE = `AnyThing host CLI
   anything disable <plugin>    disable a plugin
   anything rotate-token        issue a new token (devices must reload)
   anything config              print the config file path
+
+  anything todo "Buy milk"     add an item to the to-do page (the host must be running)
+
+  anything device              is a Car Thing attached, and does it start on AnyThing?
+  anything device install      make the Car Thing start on AnyThing at power-on
+  anything device uninstall    put its own start page back
 
 Most settings, including the macro buttons, are easier to edit in the settings
 page the host serves: http://localhost:<port>/#settings
@@ -107,6 +118,62 @@ async function main(argv: string[]): Promise<number> {
       }
       await setEnabled(argument, command === 'enable');
       return 0;
+    }
+
+    case 'todo': {
+      const title = argv.slice(1).join(' ').trim();
+      if (!title) {
+        console.error('Usage: anything todo "Buy milk"');
+        return 1;
+      }
+      const { port } = (await loadConfig()).server;
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/hooks/todo/add`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ title })
+        });
+        if (!response.ok) throw new Error(`the host answered ${response.status}`);
+      } catch (error) {
+        console.error(`Could not add it: ${(error as Error).message}. Is the host running?`);
+        return 1;
+      }
+      console.log(`Added: ${title}`);
+      return 0;
+    }
+
+    case 'device': {
+      const { address } = (await loadConfig()).device.carThing;
+      const before = await deviceInstallStatus(address);
+      if (!before.reachable) {
+        console.error(
+          `No Car Thing answering at ${address}. Plug it in and let it finish booting.`
+        );
+        return 1;
+      }
+
+      if (argument === undefined || argument === 'status') {
+        console.log(`device     ${before.firmware ?? 'unknown firmware'} at ${address}`);
+        console.log(
+          before.installed
+            ? 'starts on  AnyThing (splash, then the host once it is reachable)'
+            : "starts on  the firmware's own page; the host takes the screen over after boot"
+        );
+        return 0;
+      }
+      if (argument === 'install') {
+        await installOnDevice(address);
+        console.log('Installed. From its next power-on the Car Thing starts on AnyThing.');
+        console.log('Undo with: anything device uninstall');
+        return 0;
+      }
+      if (argument === 'uninstall') {
+        await uninstallFromDevice(address);
+        console.log("Removed. The Car Thing starts on its firmware's own page again.");
+        return 0;
+      }
+      console.error('Usage: anything device [status|install|uninstall]');
+      return 1;
     }
 
     case 'rotate-token': {

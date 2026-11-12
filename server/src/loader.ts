@@ -5,11 +5,14 @@ import type { Plugin } from '@anything/shared';
 import type { PluginHost } from './host';
 
 import appleMusic from './plugins/apple-music';
+import calendar from './plugins/calendar';
+import claudeCode from './plugins/claude-code';
 import macros from './plugins/macros';
 import sysmon from './plugins/sysmon';
+import todo from './plugins/todo';
 
 /** Plugins that ship with the host. */
-export const builtinPlugins: Plugin[] = [appleMusic, macros, sysmon];
+export const builtinPlugins: Plugin[] = [appleMusic, macros, todo, calendar, claudeCode, sysmon];
 
 function looksLikePlugin(value: unknown): value is Plugin {
   if (typeof value !== 'object' || value === null) return false;

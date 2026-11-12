@@ -50,6 +50,10 @@ you the types; the bundled plugins under `server/src/plugins/` are the reference
 | `api.serveFile(name, path)` | Serve a local file to the device; returns its URL |
 | `api.log`, `api.warn` | Namespaced logging — prefer these over `console` |
 | `api.notify(level, msg)` | Show a transient message on connected devices |
+| `api.prompt(spec, options)` | Ask a question that takes over the screen; resolves with the answer ([below](#prompts)) |
+| `api.dismissPrompt(id)` | Withdraw a prompt early |
+| `api.onRequest(path, handler)` | Receive HTTP requests from other programs on this Mac ([below](#webhooks)) |
+| `api.focus()` | Bring your page to the front on connected devices |
 
 Three behaviours worth knowing:
 
@@ -124,6 +128,76 @@ Omit an action to hide its control. The `seek` action is invoked with
 `{ position: <seconds> }`. The UI advances the progress bar locally between your
 updates and snaps to whatever you report, so a poll every second or two is
 plenty.
+
+### list
+
+A scrolling list of rows — sessions, to-dos, calendar events.
+
+```js
+{ kind: 'list', id: 'todo', w: 6, h: 2,
+  label: 'Today',                      // optional heading
+  items: [
+    { id: 'a', title: 'Ship the release', subtitle: 'before 5pm',
+      badge: 'due', badgeColor: 'red', icon: '📦' },
+    { id: 'b', title: 'Book flights', done: true }
+  ],
+  selected: 'a',                       // highlighted row, kept in view
+  action: 'open',                      // invoked with { id } on tap
+  emptyHint: 'Nothing left to do' }
+```
+
+Touch scrolls it. For the dial, bind `rotate` and move `selected` yourself:
+
+```js
+api.setControls({ rotate: 'move' });
+api.onAction('move', ({ delta }) => { /* change selected, then setTiles */ });
+```
+
+The selected row shows its subtitle in full (up to three lines, newlines kept);
+the others show one line.
+
+## Prompts
+
+A prompt covers the whole screen, whatever page is showing, until it is
+answered: "allow this command?", "timer finished", "incoming call".
+
+```js
+const choice = await api.prompt(
+  { source: 'Kitchen timer',           // small line saying who is asking
+    title: 'Pasta is done',
+    body: 'Started 11 minutes ago',    // optional; monospaced, dial scrolls it
+    choices: [
+      { id: 'snooze', label: '+1 min', role: 'secondary' },  // back button
+      { id: 'ok', label: 'Done', role: 'primary' }           // dial press
+    ] },
+  { id: 'pasta', timeoutMs: 60000 }    // both optional
+);
+// 'ok', 'snooze', or null if nobody answered, it timed out, or you dismissed it
+```
+
+Every choice is a touch target; `primary` and `secondary` additionally answer
+to the dial press and the back button. Lines of `body` starting with `+ ` or
+`- ` are coloured as a diff. Prompts queue: the oldest is shown first. A prompt
+is taken down when your plugin unloads, and re-asking under the same `id`
+replaces the earlier one.
+
+## Webhooks
+
+Other programs on the Mac can push events to your plugin over HTTP:
+
+```js
+api.onRequest('event', async ({ method, query, body }) => {
+  // body is the parsed JSON, if any
+  return { status: 200, body: { ok: true } };   // or return nothing for an empty 200
+});
+```
+
+That handler answers `http://127.0.0.1:3000/hooks/<your plugin id>/event`. The
+response is sent when the handler resolves, so it can wait for the user — a
+handler may `await api.prompt(...)` and return the answer to the caller.
+
+Only requests from the Mac itself are accepted. A device, tethered or on the
+network, cannot reach a webhook.
 
 ## Serving files
 

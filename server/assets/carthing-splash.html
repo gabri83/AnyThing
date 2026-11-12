@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=800, height=480, initial-scale=1.0, user-scalable=no">
+<title>AnyThing</title>
+<!--
+  What a Car Thing shows from power-on until the AnyThing host on the Mac is
+  reachable. Installed on the device by `anything device install`; the kiosk
+  starts here instead of on the firmware's own page.
+
+  It polls the device end of the host's tunnel and hands over as soon as that
+  answers. Without a host (a charger, someone else's computer) it stays here
+  and offers the firmware's own interface instead.
+-->
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0a0a0c; color: #f4f4f6;
+    font: 16px/1.4 system-ui, -apple-system, sans-serif; user-select: none; }
+  .wrap { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  h1 { margin: 0; font-size: 54px; font-weight: 650; letter-spacing: -0.02em; }
+  h1 span { color: #f59e42; }
+  #state { margin-top: 14px; min-height: 24px; color: #9b9ba6; font-size: 18px; }
+  .dots { margin-top: 26px; height: 10px; }
+  .dots i { display: inline-block; width: 10px; height: 10px; margin: 0 5px; border-radius: 50%; background: #f59e42;
+    animation: pulse 1.2s ease-in-out infinite; }
+  .dots i:nth-child(2) { animation-delay: 0.15s; }
+  .dots i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+  #firmware { visibility: hidden; position: absolute; left: 24px; right: 24px; bottom: 18px; height: 58px; border: 1px solid #2a2a32;
+    border-radius: 14px; background: #17171b; color: #9b9ba6; font: 600 18px system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Any<span>Thing</span></h1>
+  <div id="state">Starting</div>
+  <div class="dots"><i></i><i></i><i></i></div>
+</div>
+<button id="firmware" type="button">Use the device without a Mac</button>
+<script>
+  var HOST = 'http://127.0.0.1:7780/';
+  var FIRMWARE = 'http://127.0.0.1:8891/';
+  var started = Date.now();
+  var state = document.getElementById('state');
+  var firmware = document.getElementById('firmware');
+  var leaving = false;
+
+  function openFirmware() { leaving = true; window.location.replace(FIRMWARE); }
+  firmware.addEventListener('click', openFirmware);
+  // The back button, once the offer is showing.
+  window.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && firmware.style.visibility === 'visible') openFirmware();
+  });
+
+  function probe() {
+    if (leaving) return;
+    // no-cors: the answer is opaque, but resolving at all means the tunnel is up.
+    fetch(HOST + 'healthz', { mode: 'no-cors', cache: 'no-store' }).then(function () {
+      if (leaving) return;
+      leaving = true;
+      window.location.replace(HOST);
+    }).catch(function () {
+      var waited = (Date.now() - started) / 1000;
+      if (waited > 8) {
+        state.textContent = 'Waiting for AnyThing on your Mac';
+        firmware.style.visibility = 'visible';
+      }
+      setTimeout(probe, 1000);
+    });
+  }
+  probe();
+</script>
+</body>
+</html>

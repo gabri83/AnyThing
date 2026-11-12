@@ -111,12 +111,47 @@ export interface NowPlayingTile extends TileBase {
 
 export type PlaybackStatus = 'playing' | 'paused' | 'stopped';
 
+/** One row of a list tile. */
+export interface ListItem {
+  /** Unique within the list. */
+  id: string;
+  title: string;
+  /** Second line, dimmer. Shown in full for the selected row, one line otherwise. */
+  subtitle?: string;
+  /** Short status word shown at the right, e.g. 'working', '14:30', 'due'. */
+  badge?: string;
+  badgeColor?: TileColor;
+  /** Single character or emoji shown before the title. */
+  icon?: string;
+  /** Render the title struck through: a finished to-do, a past event. */
+  done?: boolean;
+}
+
+/**
+ * A scrolling list of rows: sessions, to-dos, calendar events. Touch scrolls it.
+ * For the dial, bind `rotate` in your controls and move `selected` yourself —
+ * the UI keeps the selected row in view.
+ */
+export interface ListTile extends TileBase {
+  kind: 'list';
+  /** Optional heading above the rows. */
+  label?: string;
+  items: ListItem[];
+  /** Id of the highlighted row, if any. */
+  selected?: string;
+  /** Action invoked with `{ id }` when a row is tapped. Omit for a read-only list. */
+  action?: string;
+  /** Shown when `items` is empty. */
+  emptyHint?: string;
+}
+
 export type Tile =
   | ButtonTile
   | ToggleTile
   | GaugeTile
   | TextTile
-  | NowPlayingTile;
+  | NowPlayingTile
+  | ListTile;
 
 /** One screen of tiles, contributed by a single plugin. */
 export interface Page {

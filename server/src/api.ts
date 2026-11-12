@@ -23,6 +23,12 @@ export interface ApiContext {
   invoke(plugin: string, action: string): Promise<void>;
   deviceUrl(): string;
   paths: { config: string; plugins: string };
+  /**
+   * True when a request arrived through the tethered-device listener. Such a
+   * request comes from loopback (the tunnel ends on this Mac) but is the
+   * device talking, so it reads without a token and may not write.
+   */
+  isDeviceRequest?(request: express.Request): boolean;
 }
 
 export const TOKEN_HEADER = 'x-anything-token';
@@ -64,12 +70,13 @@ export function createApiRouter(context: ApiContext): express.Router {
 
   router.use((request, response, next) => {
     const config = context.getConfig();
-    const local = isLoopback(request.ip);
+    const tethered = context.isDeviceRequest?.(request) ?? false;
+    const local = isLoopback(request.ip) && !tethered;
 
     // A request from the machine itself needs no token. Anything running as
     // you can already read the config file, so demanding a credential for it
     // would only mean the settings page on the Mac could not open without one.
-    if (config.auth.enabled && !local) {
+    if (config.auth.enabled && !local && !tethered) {
       const provided =
         request.header(TOKEN_HEADER) ??
         (typeof request.query.token === 'string' ? request.query.token : undefined);

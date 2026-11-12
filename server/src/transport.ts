@@ -13,8 +13,9 @@ import {
   type ServerMessage,
   type Tile
 } from '@anything/shared';
+import { isLoopback } from './api';
 import type { AnythingConfig } from './config';
-import type { PluginHost } from './host';
+import type { ActivePrompt, PluginHost } from './host';
 
 export interface TransportOptions {
   config: AnythingConfig;
@@ -61,6 +62,13 @@ export class Transport {
   private readonly clientInfo = new Map<WebSocket, ClientInfo>();
   private app!: express.Express;
   private server!: http.Server;
+  /**
+   * A second listener, loopback only, that a tethered device reaches through
+   * the connector's tunnel. Arriving here is the credential — only the device
+   * we tunnelled to can — so it needs no token; but it is still "the device",
+   * not "this Mac", so it may not change settings or call webhooks.
+   */
+  private deviceServer!: http.Server;
   private wss!: WebSocketServer;
 
   constructor(options: TransportOptions) {
@@ -84,6 +92,34 @@ export class Transport {
     this.app.set('trust proxy', 'loopback');
 
     if (this.options.api) this.app.use('/api', this.options.api);
+
+    // Plugin webhooks: other programs on this Mac pushing events to a plugin.
+    // Loopback on the main listener only, so neither the network nor the
+    // tethered device can drive them.
+    this.app.use('/hooks', express.json({ limit: '2mb' }), async (request, response) => {
+      if (!isLoopback(request.ip) || this.isDeviceRequest(request)) {
+        response.status(403).json({ error: 'Webhooks are only accepted from this Mac' });
+        return;
+      }
+      const [plugin, ...rest] = request.path.split('/').filter(Boolean);
+      const query: Record<string, string> = {};
+      for (const [key, value] of Object.entries(request.query)) {
+        if (typeof value === 'string') query[key] = value;
+      }
+      const hasBody = request.body !== undefined && request.headers['content-length'] !== '0';
+      const result = plugin
+        ? await host.handleRequest(decodeURIComponent(plugin), rest.join('/'), {
+            method: request.method,
+            query,
+            body: hasBody ? request.body : undefined
+          })
+        : null;
+      if (!result) {
+        response.status(404).json({ error: 'No plugin handles this path' });
+        return;
+      }
+      response.status(result.status ?? 200).json(result.body ?? {});
+    });
 
     this.app.get('/healthz', (_req, res) => {
       res.json({ status: 'ok', version, plugins: host.ids() });
@@ -139,11 +175,24 @@ export class Transport {
     }
 
     this.server = http.createServer(this.app);
-    this.wss = new WebSocketServer({ server: this.server, path: '/ws' });
+    this.deviceServer = http.createServer(this.app);
+    this.wss = new WebSocketServer({ noServer: true });
+    for (const listener of [this.server, this.deviceServer]) {
+      listener.on('upgrade', (request, socket, head) => {
+        if ((request.url ?? '').split('?')[0] !== '/ws') {
+          socket.destroy();
+          return;
+        }
+        this.wss.handleUpgrade(request, socket, head, (ws) =>
+          this.wss.emit('connection', ws, request)
+        );
+      });
+    }
     this.wss.on('connection', (socket, request) =>
       this.handleConnection(socket, {
         userAgent: request.headers['user-agent'] ?? null,
-        address: request.socket.remoteAddress ?? null
+        address: request.socket.remoteAddress ?? null,
+        tethered: request.socket.localPort === this.devicePort()
       })
     );
 
@@ -171,6 +220,15 @@ export class Transport {
       });
     });
 
+    // Any free port: only the connector's tunnel needs to know which.
+    await new Promise<void>((resolve, reject) => {
+      this.deviceServer.once('error', reject);
+      this.deviceServer.listen(0, '127.0.0.1', () => {
+        this.deviceServer.removeListener('error', reject);
+        resolve();
+      });
+    });
+
     host.on('pages', (pages: Page[]) => this.broadcast({ t: 'pages', pages }));
     host.on('tiles', (plugin: string, tiles: Tile[]) =>
       this.broadcast({ t: 'tiles', plugin, tiles })
@@ -181,11 +239,20 @@ export class Transport {
     host.on('notice', (level: 'info' | 'warn' | 'error', message: string) =>
       this.broadcast({ t: 'notice', level, message })
     );
+    host.on('prompts', (prompts: ActivePrompt[]) =>
+      this.broadcast({ t: 'prompts', prompts })
+    );
+    host.on('focus', (plugin: string) => this.broadcast({ t: 'focus', plugin }));
+  }
+
+  /** True when the request came in through the tethered-device listener. */
+  public isDeviceRequest(request: { socket: { localPort?: number } }): boolean {
+    return request.socket.localPort === this.devicePort();
   }
 
   private handleConnection(
     socket: WebSocket,
-    origin: { userAgent: string | null; address: string | null }
+    origin: { userAgent: string | null; address: string | null; tethered?: boolean }
   ): void {
     const { host, version } = this.options;
     let authenticated = false;
@@ -211,7 +278,11 @@ export class Transport {
           return;
         }
         const { config } = this.options;
-        if (config.auth.enabled && !tokenMatches(config.auth.token, message.token)) {
+        if (
+          config.auth.enabled &&
+          !origin.tethered &&
+          !tokenMatches(config.auth.token, message.token)
+        ) {
           console.warn(`[ws] rejected ${message.client}: bad token`);
           this.send(socket, {
             t: 'denied',
@@ -250,6 +321,7 @@ export class Transport {
           input: this.options.config.input
         });
         this.send(socket, { t: 'pages', pages: host.pages() });
+        this.send(socket, { t: 'prompts', prompts: host.pendingPrompts() });
         return;
       }
 
@@ -257,6 +329,8 @@ export class Transport {
 
       if (message.t === 'invoke') {
         await host.invoke(message.plugin, message.action, message.payload);
+      } else if (message.t === 'answer') {
+        host.answerPrompt(message.prompt, message.choice);
       }
     });
 
@@ -303,11 +377,20 @@ export class Transport {
     return typeof address === 'object' && address !== null ? address.port : 0;
   }
 
+  /** Port of the tethered-device listener, for the connector's tunnel. */
+  public devicePort(): number {
+    const address = this.deviceServer?.address();
+    return typeof address === 'object' && address !== null ? address.port : 0;
+  }
+
   public async stop(): Promise<void> {
     for (const client of this.clients) client.close(1001, 'Host shutting down');
     this.clients.clear();
     this.clientInfo.clear();
     await new Promise<void>((resolve) => this.wss.close(() => resolve()));
+    this.server.closeAllConnections?.();
+    this.deviceServer.closeAllConnections?.();
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
+    await new Promise<void>((resolve) => this.deviceServer.close(() => resolve()));
   }
 }

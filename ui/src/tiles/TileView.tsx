@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import type { Tile } from '@anything/shared';
 import { ButtonTileView } from './ButtonTileView';
 import { GaugeTileView } from './GaugeTileView';
+import { ListTileView } from './ListTileView';
 import { NowPlayingTileView } from './NowPlayingTileView';
 import { TextTileView } from './TextTileView';
 import { ToggleTileView } from './ToggleTileView';
@@ -38,5 +39,7 @@ export function TileView({ tile, invoke }: TileProps) {
       return <TextTileView tile={tile} invoke={invoke} />;
     case 'now-playing':
       return <NowPlayingTileView tile={tile} invoke={invoke} />;
+    case 'list':
+      return <ListTileView tile={tile} invoke={invoke} />;
   }
 }

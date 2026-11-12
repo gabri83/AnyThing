@@ -2,119 +2,136 @@
 
 ## What it actually is
 
-The Spotify Car Thing (codename **superbird**) is an Amlogic S905D3 board
+The Spotify Car Thing (codename **superbird**) is an Amlogic S905D2 board
 running Linux, with an 800×480 landscape touchscreen, four preset buttons, a
-dial and a back button, over USB-C.
+dial that also presses, a back button, a microphone array and Bluetooth, over
+USB-C. It has **no Wi-Fi** — the radio is a Bluetooth-only BCM20703A2.
 
-It is **not** a USB display. You flash it once, and afterwards it runs a
-Chromium kiosk. AnyThing is a web page as far as it is concerned, which is why
-you can use all of this from a laptop and sort the hardware out whenever.
+It is **not** a USB display. Once flashed with a community image it runs a
+Chromium kiosk, and AnyThing is a web page as far as it is concerned. That is
+why you can use all of this from a laptop and sort the hardware out whenever.
 
-> The software in this repo is tested. The device-side steps below are drawn
-> from the Nocturne project and its community, **not verified by this project**,
-> and the details differ between image versions. Read upstream before writing to
-> the device.
+## Bridgething: plug in and it works
 
-## The browser is old, and it matters
+This is the path the project is developed and tested against (Bridgething
+0.2.5, kernel 7.0.2, Chromium 147).
 
-The stock image runs QtWebEngine 5.12.7 — **Chromium 69.0.3497**. The custom
-images still build for that target. This is the single biggest constraint on
-the UI, and it fails loudly rather than gracefully:
+With the host running, plug the Car Thing into the Mac. A few seconds after it
+boots, AnyThing is on its screen. There is nothing to configure and nothing is
+installed on the device.
 
-- optional chaining (`?.`) and nullish coalescing (`??`) are **Chrome 80**. One
-  of either anywhere in the bundle is a syntax error and a blank screen, with
-  nothing in the host log to explain it.
-- `gap` inside a **flex** container is Chrome 84. It is silently ignored, and
-  everything ends up touching. Grid gap is fine — Chrome 66.
-- `color-mix()` is Chrome 111, `aspect-ratio` Chrome 88, the `inset` shorthand
-  Chrome 87, `:is()` and `:where()` Chrome 88.
+How, in case it does not:
 
-So the UI builds with `target: 'chrome69'`, the device stylesheet avoids all of
-the above, and `npm run check:device` enforces both — it parses every emitted
-JS file as ES2019 and scans `ui/src/styles.css` for features that are too new.
-It runs as part of `npm run build` and in CI.
+- The image exposes **USB networking**: the device is `10.42.1.82` and hands
+  the Mac an address on the same link.
+- It runs `sshd` (root, no password) and its kiosk has a DevTools port on the
+  device's own loopback.
+- The host's connector opens **one ssh process** with two forwards: one lets
+  the kiosk load the UI from the Mac (`127.0.0.1:7780` on the device), the
+  other lets the host tell the kiosk which page to show.
+- For the first minute after connecting the connector keeps putting AnyThing
+  back, because a booting device loads its own page a moment after the browser
+  starts. After that it leaves the screen alone — press `m` five times for
+  Bridgething's own launcher.
+- Stopping the host gives the screen back to Bridgething. So does unplugging.
 
-The settings page is exempt: that one is only ever opened on the Mac, and its
-styles live in `ui/src/settings/settings.css`.
+Because the device comes in through that tunnel, **the host listens on
+loopback only** by default and the device needs no token. A tethered device can
+use the controller but cannot change settings or call plugin webhooks.
 
-**To find out what your device actually runs**, connect it and look at the host's
-terminal. Every connection logs the browser's user agent:
-
-```
-[ws] device connected (1 total)
-[ws]   Mozilla/5.0 (X11; Linux ...) ... Chrome/69.0.3497.128 Safari/537.36
+```json
+"device": { "carThing": { "enabled": true, "address": "10.42.1.82" } }
 ```
 
-It is also in `GET /status` under `connected`. If yours turns out to be newer,
-the target in `ui/vite.config.ts` can be raised.
+Set `enabled` to `false` to stop the host looking for one.
 
-## If you have Nocturne
+### Starting on AnyThing at power-on
 
-Good news first: **it is already flashed**, so there is nothing to reflash. It
-already runs a Chromium kiosk — it just points at Nocturne's own app, and the
-job is repointing it.
-
-Better news: Nocturne exposes the device over **USB networking** (CDC-NCM), so
-the device can reach a server on your Mac with no Wi-Fi involved. The device is
-`nocturne.local`, or `172.16.42.2`; your Mac is the other end of that link,
-usually `172.16.42.1`.
-
-Run this on the Mac with the device plugged in:
+Out of the box the device boots to Bridgething's own page and the host takes
+the screen a couple of seconds later. To make it start on AnyThing instead:
 
 ```bash
-npm run find-device
+node server/dist/cli.js device install
 ```
 
-It looks for the device on USB, finds which interface your Mac is using, checks
-that the device answers, works out the address the device must call *back* on,
-and prints the exact steps for the rest. It only looks — it changes nothing.
+That writes two files to the device's writable partition: a small splash page,
+and the kiosk override the firmware already looks for
+(`/opt/bridgething/kiosk-env`). From the next power-on the device shows the
+AnyThing splash, which hands over as soon as the host is reachable. Plugged
+into a charger or another computer it stays on the splash and, after a few
+seconds, offers "Use the device without a Mac", which opens Bridgething's own
+interface. Nothing in the firmware is modified;
+`node server/dist/cli.js device uninstall` removes both files.
 
-The shape of it:
+### Checking what is on the screen
 
-1. `node server/dist/cli.js url` for a token
-2. `ssh root@nocturne.local` — the password is `nocturne`
-3. `mount -o remount,rw /`
-4. Find where the kiosk URL is set and point it at
-   `http://172.16.42.1:3000/?token=…`
-   - older images: the `command=` line under `[program:chromium]` in
-     `/etc/supervisord.conf`, usually ending `--app=http://localhost:80`
-   - newer images: `/scripts/chromium_settings.sh`
-   - `grep -rn chromium /etc/supervisord.conf /scripts/` finds whichever
-5. `sync && mount -o remount,ro /` then `supervisorctl restart chromium`
+`GET /status` lists connected clients with their user agent. The host log says
+`[carthing] AnyThing is on the Car Thing screen` when the kiosk has loaded it.
+
+### Controls, as measured
+
+| Control | What the page receives |
+| --- | --- |
+| Dial, one click | `wheel` event, `deltaX` ±120 (`deltaY` 0) |
+| Dial press | `Enter` |
+| Back button | `Escape` |
+| Preset buttons 1–4 | `1` `2` `3` `4` |
+| Settings button | `m` (five quick presses return to Bridgething's launcher) |
+| Touch | ordinary pointer events |
+
+The default keymap matches this, so nothing needs learning. If the dial runs
+backwards, set `input.wheelInvert`.
+
+## Nocturne and other images
+
+> Not verified by this project. The steps are drawn from the Nocturne
+> community, and the details differ between image versions.
+
+Nocturne also runs a Chromium kiosk and exposes USB networking — the device is
+`nocturne.local` or `172.16.42.2`, the Mac `172.16.42.1` — but the automatic
+connector above is written for Bridgething. On Nocturne, repoint the kiosk by
+hand:
+
+1. Set `server.host` to `0.0.0.0` in the config so the device can reach the
+   host, then `node server/dist/cli.js url` for a URL with the token
+2. `npm run find-device` to confirm the device answers and which address it
+   must call back on
+3. `ssh root@nocturne.local` (password `nocturne`), `mount -o remount,rw /`
+4. Find where the kiosk URL is set — `grep -rn chromium /etc/supervisord.conf
+   /scripts/` — and point it at `http://172.16.42.1:3000/?token=…`
+5. `sync && mount -o remount,ro /`, then `supervisorctl restart chromium`
 
 Copy the original line somewhere first so you can put it back.
 
-The token only needs to be in the URL once — the page moves it into local
-storage. If you would rather not have a credential sitting in a config file on
-the device, set `auth.enabled` to `false` and `server.host` to `172.16.42.1`, so
-the host is reachable only over the USB link. That is a real trade: read the
-token section of the README first.
+### The browser may be old, and it matters
+
+The stock image and the Nocturne-era images run QtWebEngine 5.12 — **Chromium
+69**. Bridgething ships Chromium 147, but the UI is still built for the old one
+so a single build works everywhere:
+
+- optional chaining (`?.`) and nullish coalescing (`??`) are Chrome 80. One of
+  either in the bundle is a syntax error and a blank screen.
+- `gap` inside a **flex** container is Chrome 84 and is silently ignored. Grid
+  gap is fine.
+- `color-mix()` is Chrome 111, `aspect-ratio` Chrome 88, the `inset` shorthand
+  Chrome 87, `:is()` and `:where()` Chrome 88.
+
+The UI builds with `target: 'chrome69'`, the device stylesheet avoids all of
+the above, and `npm run check:device` enforces both. The settings page is
+exempt: it is only opened on the Mac.
 
 ## Which firmware is on yours?
 
 Power it on and look at the screen.
 
 - **Spotify branding** or a setup prompt — stock, never flashed.
-- **A Nocturne splash or UI** — Nocturne. See above.
+- **A Bridgething screen** — plug it in; see above.
+- **A Nocturne splash or UI** — see the Nocturne section.
 - Something else — some other custom image; it will still be a kiosk pointing
   at *some* URL, and the job is the same shape.
 
-## Why there is no firmware in this repo
+## Screen
 
-An earlier version of this project contained a firmware tree targeting an
-**nRF52840** — a Cortex-M4 microcontroller with 1MB of flash — plus a USB
-protocol for pushing RGB565 frame buffers to it.
-
-The Car Thing contains no nRF52840 and nothing in it works that way. That code
-could never have run on the hardware it named, so it was removed rather than
-carried forward.
-
-## Screen and controls
-
-The UI targets 800×480 landscape, three rows of six tiles, no scrolling, with
-touch targets sized for a thumb. Under 720px wide it becomes a two-column
-scrolling list, which is what makes it usable on a phone.
-
-The dial, back button and presets are wired up — what they emit depends on the
-image, so the mapping is configurable and there is an inspector at `/#input`.
-See [CONTROLS.md](CONTROLS.md).
+The UI targets 800×480 landscape: three rows of six tiles under one bar, touch
+targets sized for a thumb. Under 720px wide it becomes a two-column scrolling
+list, which is what makes it usable on a phone.
