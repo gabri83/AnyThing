@@ -5,7 +5,7 @@ for your Mac.
 
 A small server runs on your Mac. Plugins publish **tiles**; the device renders
 them in a grid and sends presses back. Plug a Car Thing into the Mac and
-AnyThing appears on its screen. Six plugins ship with it:
+AnyThing appears on its screen. Seven plugins ship with it:
 
 | Plugin | What it does |
 | --- | --- |
@@ -15,6 +15,7 @@ AnyThing appears on its screen. Six plugins ship with it:
 | `todo` | A to-do list ticked off with the dial. Add items from the Mac: `anything todo "Buy milk"` |
 | `calendar` | What is coming up, from any iCalendar (.ics) feed — iCloud, Google, Outlook |
 | `claude-code` | Every Claude Code session at a glance, and permission requests answered from the dial ([docs](docs/CLAUDE-CODE.md)) |
+| `prometheus` | A server at a glance: gauges from Prometheus queries and the alerts firing now, with a prompt when a new one fires. Off until given a URL ([docs](docs/SERVER.md)) |
 
 Everything the bundled plugins do goes through the same public plugin API, so a
 plugin you write has exactly the capabilities they have — including the dial and
@@ -22,7 +23,7 @@ the physical buttons.
 
 ## Install
 
-On a Mac with [Node.js](https://nodejs.org) 18 or newer and git:
+On a Mac, or a Linux machine ([notes](docs/SERVER.md)), with [Node.js](https://nodejs.org) 18 or newer and git:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gabri83/AnyThing/main/install.sh | bash

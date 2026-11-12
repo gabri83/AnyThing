@@ -127,7 +127,7 @@ export default definePlugin({
     name: 'System',
     version: '1.0.0',
     description: 'CPU, memory, temperature and fan readings for the host',
-    icon: '◴',
+    icon: '📊',
     defaultConfig: { pollMs: 2000, sensors: true }
   },
 

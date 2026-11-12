@@ -20,7 +20,7 @@ import { createInterface } from 'readline';
 import {
   currentLayout,
   installService,
-  logPath,
+  logCommand,
   restartService,
   serviceIsOurs,
   serviceStatus,
@@ -179,18 +179,19 @@ async function serviceCommand(action: string | undefined, flags: string[] = []):
       }
       console.log(
         status.running
-          ? `running    pid ${status.pid ?? '?'}, starts at login`
+          ? `running    pid ${status.pid ?? '?'}, starts by itself`
           : 'stopped    installed, but not running right now'
       );
       if (status.entry) console.log(`runs       ${status.entry}`);
-      console.log(`log        ${logPath()}`);
+      console.log('log        anything service logs');
       return 0;
     }
     case 'install': {
       const layout = currentLayout();
-      await installService(layout);
-      console.log('The host is running in the background and will start at every login.');
-      console.log(`It runs from ${layout.workingDirectory}; its log is ${layout.log}`);
+      const note = await installService(layout);
+      console.log('The host is running in the background and will start by itself from now on.');
+      console.log(`It runs from ${layout.workingDirectory}. Follow its log with: anything service logs`);
+      if (note) console.log(`\n${note}`);
       return 0;
     }
     case 'uninstall':
@@ -201,8 +202,10 @@ async function serviceCommand(action: string | undefined, flags: string[] = []):
       await restartService();
       console.log('Restarted.');
       return 0;
-    case 'logs':
-      return attached('tail', ['-n', '40', '-f', logPath()]);
+    case 'logs': {
+      const { command, args } = logCommand();
+      return attached(command, args);
+    }
     default:
       console.error('Usage: anything service [status|install|uninstall|restart|logs]');
       return 1;

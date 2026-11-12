@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { SERVICE_LABEL, servicePlist, stableNode } from './service';
+import { SERVICE_LABEL, servicePlist, serviceUnit, stableNode } from './service';
 
 describe('stableNode', () => {
   it('prefers the PATH entry that points at the running node over a versioned path', () => {
@@ -49,5 +49,27 @@ describe('servicePlist', () => {
     expect(path[0]).toBe('/opt/homebrew/bin');
     expect(path).toContain('/usr/bin');
     expect(new Set(path).size).toBe(path.length);
+  });
+});
+
+describe('serviceUnit', () => {
+  const unit = serviceUnit({
+    node: '/usr/bin/node',
+    entry: '/home/me/my "lab" 100%/server/dist/index.js',
+    workingDirectory: '/home/me/my "lab" 100%',
+    log: ''
+  });
+
+  it('is a user service that restarts and starts with the session', () => {
+    expect(unit).toContain('Restart=always');
+    expect(unit).toContain('WantedBy=default.target');
+    expect(unit).toMatch(/^Environment=PATH=\/usr\/bin:\/usr\/local\/bin:/m);
+  });
+
+  it('quotes the command so spaces, quotes and percent signs survive systemd', () => {
+    expect(unit).toContain(
+      'ExecStart="/usr/bin/node" "/home/me/my \\"lab\\" 100%%/server/dist/index.js"'
+    );
+    expect(unit).toContain('WorkingDirectory=/home/me/my "lab" 100%%');
   });
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Install AnyThing on this Mac:
+# Install AnyThing on this Mac or Linux machine:
 #
 #   curl -fsSL https://raw.githubusercontent.com/gabri83/AnyThing/main/install.sh | bash
 #
@@ -47,7 +47,7 @@ main() {
   fi
 
   say "Checking what is needed"
-  command -v git >/dev/null 2>&1 || fail "git is missing. Install the Xcode command line tools: xcode-select --install"
+  command -v git >/dev/null 2>&1 || fail "git is missing. On a Mac: xcode-select --install. On Linux: install it with your package manager."
   command -v node >/dev/null 2>&1 || fail "Node.js is missing. Install it from https://nodejs.org or with: brew install node"
   command -v npm >/dev/null 2>&1 || fail "npm is missing; it normally comes with Node.js"
   local major
@@ -87,11 +87,14 @@ main() {
 
   if [ "${ANYTHING_NO_SERVICE:-0}" = "1" ]; then
     say "Not starting the host in the background (ANYTHING_NO_SERVICE=1)"
-  elif [ "$(uname -s)" = "Darwin" ]; then
-    say "Starting the host in the background"
-    "$bin/anything" service install
   else
-    say "Background start is set up for macOS only; run: anything start"
+    case "$(uname -s)" in
+      Darwin|Linux)
+        say "Starting the host in the background"
+        "$bin/anything" service install
+        ;;
+      *) say "Background start is set up for macOS and Linux only; run: anything start" ;;
+    esac
   fi
 
   echo
@@ -137,7 +140,7 @@ bin_dir() {
 
 uninstall() {
   local app="$1" candidate
-  if [ "$(uname -s)" = "Darwin" ] && [ -x "$app/server/dist/cli.js" ]; then
+  if [ -x "$app/server/dist/cli.js" ]; then
     say "Stopping the host"
     "$app/server/dist/cli.js" service uninstall --if-mine || true
   fi
